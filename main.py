@@ -10,10 +10,49 @@ Layout (1280×720):
 
 import pygame
 import sys
+import os
 import traceback
 from game_component.game_factory import create_game
 from game_component.game import IDLE, PENDING_RETURN_TOKENS, PENDING_CHOOSE_NOBLE
 from bot import bot_make_move
+
+# ── Image assets (optional — place files in assets/ to enable) ────────────────
+# Expected files:
+#   assets/bg.png               — 1280×720 board background
+#   assets/token_white.png      — ~60×60 circular token images (transparent PNG)
+#   assets/token_blue.png
+#   assets/token_green.png
+#   assets/token_red.png
+#   assets/token_black.png
+#   assets/token_gold.png
+#   assets/noble_0.png … noble_9.png  — ~118×122 noble portrait images
+#   assets/card_bg_L1.png             — card illustration per level (overlaid)
+#   assets/card_bg_L2.png
+#   assets/card_bg_L3.png
+
+def _load_img(path, size=None):
+    """Load an image if it exists; return None otherwise."""
+    if not os.path.exists(path):
+        return None
+    img = pygame.image.load(path).convert_alpha()
+    if size:
+        img = pygame.transform.smoothscale(img, size)
+    return img
+
+def _load_assets():
+    base = os.path.join(os.path.dirname(__file__), "assets")
+    assets = {}
+    assets["bg"] = _load_img(os.path.join(base, "bg.png"), (1280, 720))
+    for color in ["white", "blue", "green", "red", "black", "gold"]:
+        assets[f"token_{color}"] = _load_img(
+            os.path.join(base, f"token_{color}.png"), (52, 52))
+    for lv in [1, 2, 3]:
+        assets[f"card_bg_L{lv}"] = _load_img(
+            os.path.join(base, f"card_bg_L{lv}.png"), (148, 152))
+    for i in range(10):
+        assets[f"noble_{i}"] = _load_img(
+            os.path.join(base, f"noble_{i}.png"), (118, 122))
+    return assets
 
 # ── Screen ────────────────────────────────────────────────────────────────────
 SW, SH  = 1280, 720
@@ -231,7 +270,18 @@ def rnd(surf, col, rect, r=7, border=0, bcol=None):
         pygame.draw.rect(surf, bcol or col, rect, border, border_radius=r)
 
 
-def gem_circle(surf, color_name, cx, cy, r=TOKEN_R, label="", font=None, alpha=255):
+def gem_circle(surf, color_name, cx, cy, r=TOKEN_R, label="", font=None, alpha=255,
+               img=None):
+    if img:
+        size = r * 2
+        scaled = pygame.transform.smoothscale(img, (size, size))
+        if alpha < 255:
+            scaled.set_alpha(alpha)
+        surf.blit(scaled, (cx - r, cy - r))
+        if label and font:
+            t = font.render(label, True, GEM_TEXT.get(color_name, (255, 255, 255)))
+            surf.blit(t, t.get_rect(center=(cx, cy)))
+        return
     if alpha < 255:
         tmp = pygame.Surface((r * 2 + 2, r * 2 + 2), pygame.SRCALPHA)
         _draw_gem_on(tmp, color_name, r + 1, r + 1, r, label, font)
@@ -256,12 +306,15 @@ def _draw_gem_on(surf, color_name, cx, cy, r, label, font):
         surf.blit(t, t.get_rect(center=(cx, cy)))
 
 
-def draw_card(surf, card, rect, fonts, hl=False, green=False):
+def draw_card(surf, card, rect, fonts, hl=False, green=False, assets=None):
     x, y, w, h = rect
     bg = card_bg(card.level, card.color_bonus)
     border = GEM.get(card.color_bonus, (110, 110, 110))
 
     rnd(surf, bg, rect, r=7)
+    card_img = assets.get(f"card_bg_L{card.level}") if assets else None
+    if card_img:
+        surf.blit(card_img, (x, y))
     if hl:
         pygame.draw.rect(surf, HILITE, rect, 3, border_radius=7)
     elif green:
@@ -269,10 +322,15 @@ def draw_card(surf, card, rect, fonts, hl=False, green=False):
     else:
         pygame.draw.rect(surf, border, rect, 2, border_radius=7)
 
-    # Top colour strip
+    # Top colour strip with bonus gem
     rnd(surf, border, (x, y, w, 22), r=7)
+    gem_col = GEM.get(card.color_bonus, border)
+    pygame.draw.circle(surf, GEM_DARK.get(card.color_bonus, border), (x + w - 13, y + 11), 9)
+    pygame.draw.circle(surf, gem_col, (x + w - 13, y + 11), 7)
+    hl2 = tuple(min(255, v + 60) for v in gem_col)
+    pygame.draw.circle(surf, hl2, (x + w - 16, y + 8), 3)
 
-    # Points (top-left)
+    # Points (top-left, below strip)
     if card.points > 0:
         pt = fonts["bold"].render(str(card.points), True, TEXT_C)
         surf.blit(pt, (x + 5, y + 24))
@@ -306,9 +364,11 @@ def draw_hidden(surf, deck, rect, fonts, hovering=False):
     surf.blit(cnt, cnt.get_rect(center=(x + w // 2, y + h // 2 + 9)))
 
 
-def draw_noble(surf, noble, rect, fonts, hl=False):
+def draw_noble(surf, noble, rect, fonts, hl=False, noble_img=None):
     x, y, _, _ = rect
     rnd(surf, (155, 140, 106), rect, r=7)
+    if noble_img:
+        surf.blit(noble_img, (x, y))
     pygame.draw.rect(surf, HILITE if hl else (116, 104, 76), rect, 2 if not hl else 3, border_radius=7)
     pt = fonts["bold"].render(str(noble.points), True, (24, 24, 24))
     surf.blit(pt, (x + 5, y + 5))
@@ -350,9 +410,12 @@ class SplendorApp:
 
     def __init__(self):
         pygame.init()
-        self.screen = pygame.display.set_mode((SW, SH))
-        pygame.display.set_caption("Splendor — Human vs Bot")
+        self.fullscreen = False
+        self.screen = pygame.display.set_mode((SW, SH), pygame.RESIZABLE | pygame.SCALED)
+        pygame.display.set_caption("Splendor — Human vs Bot  [F11 = fullscreen]")
         self.clock  = pygame.time.Clock()
+
+        self.assets = _load_assets()
 
         self.fonts = {
             "title":  pygame.font.SysFont("segoeui", 38, bold=True),
@@ -405,8 +468,14 @@ class SplendorApp:
         for ev in pygame.event.get():
             if ev.type == pygame.QUIT:
                 pygame.quit(); sys.exit()
-            if ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE:
-                self._cancel()
+            if ev.type == pygame.KEYDOWN:
+                if ev.key == pygame.K_ESCAPE:
+                    self._cancel()
+                elif ev.key == pygame.K_F11:
+                    self.fullscreen = not self.fullscreen
+                    flags = (pygame.FULLSCREEN | pygame.SCALED) if self.fullscreen \
+                            else (pygame.RESIZABLE | pygame.SCALED)
+                    self.screen = pygame.display.set_mode((SW, SH), flags)
             if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
                 self._click(*ev.pos)
 
@@ -749,7 +818,10 @@ class SplendorApp:
     # ── Draw ──────────────────────────────────────────────────────────────────
 
     def _draw(self):
-        self.screen.fill(BG)
+        if self.assets.get("bg"):
+            self.screen.blit(self.assets["bg"], (0, 0))
+        else:
+            self.screen.fill(BG)
         if self.mode == UM.START:
             self._draw_start(); return
 
@@ -812,7 +884,10 @@ class SplendorApp:
         lbl = self.fonts["bold"].render("Nobles", True, DIM_C)
         s.blit(lbl, (NOBLE_X, NOBLE_Y - 16))
         for i, noble in enumerate(g.board.nobles):
-            draw_noble(s, noble, noble_rect(i), self.fonts, hl=noble in pending)
+            idx = getattr(noble, "_asset_index", i)
+            noble_img = self.assets.get(f"noble_{idx}")
+            draw_noble(s, noble, noble_rect(i), self.fonts,
+                       hl=noble in pending, noble_img=noble_img)
 
     # ── Board (card rows) ────────────────────────────────────────────────────
 
@@ -835,7 +910,8 @@ class SplendorApp:
                 hov   = in_rect(mx, my, r)
                 hl    = hov and m in (UM.BUY_CARD, UM.RESERVE)
                 green = human.can_afford(card) and m == UM.BUY_CARD and not hl
-                draw_card(s, card, r, self.fonts, hl=hl, green=green)
+                draw_card(s, card, r, self.fonts, hl=hl, green=green,
+                          assets=self.assets)
 
     # ── Middle column B: tokens + buttons ────────────────────────────────────
 
@@ -869,9 +945,11 @@ class SplendorApp:
                     pygame.draw.circle(s, HILITE, (cx, cy), TOKEN_R + 5)
                 elif pick and hov:
                     pygame.draw.circle(s, AFFORD_G, (cx, cy), TOKEN_R + 4)
+                tok_img = self.assets.get(f"token_{color}")
                 gem_circle(s, color, cx, cy, TOKEN_R,
-                           label=str(amt), font=self.fonts["bold"])
-                if color == "gold":
+                           label=str(amt), font=self.fonts["bold"],
+                           img=tok_img)
+                if color == "gold" and not tok_img:
                     star = self.fonts["small"].render("★", True, (50, 34, 0))
                     s.blit(star, star.get_rect(center=(cx, cy - TOKEN_R + 9)))
 
@@ -937,13 +1015,13 @@ class SplendorApp:
                                           HILITE if active else TEXT_C)
         s.blit(pts, pts.get_rect(topright=(px + pw - 8, py + 5)))
 
-        # Tokens row
+        # Tokens row  (6 circles, 40px spacing → fits in 282px panel)
         all_c  = COLOR_ORDER + ["gold"]
         pend_r = (self.mode == UM.PEND_RETURN and is_human)
         mx2, my2 = pygame.mouse.get_pos()
         for i, color in enumerate(all_c):
             amt = player.tokens.get(color, 0)
-            cx, cy = px + 12 + i * 54 + 14, py + 40
+            cx, cy = px + 12 + i * 40 + 14, py + 40
             hover = pend_r and in_circ(mx2, my2, cx, cy, 16) and amt > 0
             if hover:
                 pygame.draw.circle(s, HILITE, (cx, cy), 18)
@@ -952,8 +1030,15 @@ class SplendorApp:
                 pygame.draw.circle(s, GEM_DARK[color], (cx, cy), 13, 1)
                 n = self.fonts["small"].render(str(amt), True, GEM_TEXT[color])
                 s.blit(n, n.get_rect(center=(cx, cy)))
+                if color == "gold":
+                    star = self.fonts["small"].render("★", True, (50, 34, 0))
+                    s.blit(star, star.get_rect(center=(cx, cy - 7)))
             else:
-                pygame.draw.circle(s, (48, 50, 62), (cx, cy), 13)
+                empty_col = (70, 58, 12) if color == "gold" else (48, 50, 62)
+                pygame.draw.circle(s, empty_col, (cx, cy), 13)
+                if color == "gold":
+                    star = self.fonts["small"].render("★", True, (90, 74, 18))
+                    s.blit(star, star.get_rect(center=(cx, cy)))
 
         # Bonus row
         bonus = player.get_bonus_count()
