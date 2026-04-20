@@ -11,6 +11,7 @@ Layout (1280×720):
 import pygame
 import sys
 import os
+import math
 import traceback
 from game_component.game_factory import create_game
 from game_component.game import IDLE, PENDING_RETURN_TOKENS, PENDING_CHOOSE_NOBLE
@@ -306,6 +307,15 @@ def _draw_gem_on(surf, color_name, cx, cy, r, label, font):
         surf.blit(t, t.get_rect(center=(cx, cy)))
 
 
+def draw_star(surf, cx, cy, r_outer, r_inner, color):
+    pts = []
+    for i in range(10):
+        angle = -math.pi / 2 + i * math.pi / 5
+        r = r_outer if i % 2 == 0 else r_inner
+        pts.append((cx + r * math.cos(angle), cy + r * math.sin(angle)))
+    pygame.draw.polygon(surf, color, pts)
+
+
 def draw_card(surf, card, rect, fonts, hl=False, green=False, assets=None):
     x, y, w, h = rect
     bg = card_bg(card.level, card.color_bonus)
@@ -447,10 +457,10 @@ class SplendorApp:
 
     # ── Toast helper ──────────────────────────────────────────────────────────
 
-    def _toast(self, text, color=None):
+    def _toast(self, text, color=None, dur=1800):
         if color is None:
             color = TEXT_C
-        self.toasts.append(Toast(text, color))
+        self.toasts.append(Toast(text, color, dur))
 
     # ── Main loop ─────────────────────────────────────────────────────────────
 
@@ -649,9 +659,7 @@ class SplendorApp:
                         self.fly_cards.append(FlyCard(r, card.color_bonus))
                         self._after_human()
                     else:
-                        self._toast("Can't afford that card!", TOAST_ER)
-                        self.mode = UM.IDLE
-                        self.status = "Can't afford — choose another action."
+                        self._toast("Can't afford.", TOAST_ER, dur=700)
                     return
 
     # ── Reserve card ─────────────────────────────────────────────────────────
@@ -701,13 +709,12 @@ class SplendorApp:
                                 + (f" +{card.points}pt!" if card.points else "!"), TOAST_OK)
                     self._after_human()
                 else:
-                    self._toast("Can't afford that reserved card.", TOAST_ER)
-                    self.mode = UM.IDLE
+                    self._toast("Can't afford.", TOAST_ER, dur=700)
                 return
 
     def _res_rect(self, slot):
-        ry = HUMAN_Y + PANEL_H - 106
-        return (PANEL_X + 8 + slot * 74, ry, 68, 92)
+        res_y = HUMAN_Y + 93
+        return (PANEL_X + 6 + slot * 85, res_y, 80, 108)
 
     # ── Pending – return token ────────────────────────────────────────────────
 
@@ -867,12 +874,10 @@ class SplendorApp:
 
     def _draw_title(self):
         s = self.screen
-        t = self.fonts["large"].render("SPLENDOR", True, HILITE)
-        s.blit(t, (BOARD_X, 10))
-        g    = self.game
+        g = self.game
         info = self.fonts["normal"].render(
             f"Round {g.round_number}  ·  {g.current_player.name}'s turn", True, DIM_C)
-        s.blit(info, info.get_rect(midright=(MID_X - 8, 20)))
+        s.blit(info, info.get_rect(midright=(MID_X - 8, 16)))
 
     # ── Nobles ───────────────────────────────────────────────────────────────
 
@@ -950,8 +955,7 @@ class SplendorApp:
                            label=str(amt), font=self.fonts["bold"],
                            img=tok_img)
                 if color == "gold" and not tok_img:
-                    star = self.fonts["small"].render("★", True, (50, 34, 0))
-                    s.blit(star, star.get_rect(center=(cx, cy - TOKEN_R + 9)))
+                    draw_star(s, cx, cy - TOKEN_R + 9, 5, 2, (50, 34, 0))
 
             side = "WILD" if color == "gold" else color[:3].upper()
             name = self.fonts["small"].render(side, True,
@@ -1015,78 +1019,97 @@ class SplendorApp:
                                           HILITE if active else TEXT_C)
         s.blit(pts, pts.get_rect(topright=(px + pw - 8, py + 5)))
 
-        # Tokens row  (6 circles, 40px spacing → fits in 282px panel)
+        # ── Row 1: Tokens (6 circles, 40px spacing) ──────────────────────────
         all_c  = COLOR_ORDER + ["gold"]
         pend_r = (self.mode == UM.PEND_RETURN and is_human)
         mx2, my2 = pygame.mouse.get_pos()
+        tok_y  = py + 32
         for i, color in enumerate(all_c):
-            amt = player.tokens.get(color, 0)
-            cx, cy = px + 12 + i * 40 + 14, py + 40
-            hover = pend_r and in_circ(mx2, my2, cx, cy, 16) and amt > 0
+            amt   = player.tokens.get(color, 0)
+            cx    = px + 14 + i * 40
+            hover = pend_r and in_circ(mx2, my2, cx, tok_y, 14) and amt > 0
             if hover:
-                pygame.draw.circle(s, HILITE, (cx, cy), 18)
+                pygame.draw.circle(s, HILITE, (cx, tok_y), 16)
             if amt > 0:
-                pygame.draw.circle(s, GEM[color],      (cx, cy), 13)
-                pygame.draw.circle(s, GEM_DARK[color], (cx, cy), 13, 1)
+                pygame.draw.circle(s, GEM[color],      (cx, tok_y), 13)
+                pygame.draw.circle(s, GEM_DARK[color], (cx, tok_y), 13, 1)
                 n = self.fonts["small"].render(str(amt), True, GEM_TEXT[color])
-                s.blit(n, n.get_rect(center=(cx, cy)))
+                s.blit(n, n.get_rect(center=(cx, tok_y)))
                 if color == "gold":
-                    star = self.fonts["small"].render("★", True, (50, 34, 0))
-                    s.blit(star, star.get_rect(center=(cx, cy - 7)))
+                    draw_star(s, cx, tok_y - 6, 4, 2, (50, 34, 0))
             else:
                 empty_col = (70, 58, 12) if color == "gold" else (48, 50, 62)
-                pygame.draw.circle(s, empty_col, (cx, cy), 13)
+                pygame.draw.circle(s, empty_col, (cx, tok_y), 13)
                 if color == "gold":
-                    star = self.fonts["small"].render("★", True, (90, 74, 18))
-                    s.blit(star, star.get_rect(center=(cx, cy)))
+                    draw_star(s, cx, tok_y, 4, 2, (110, 90, 30))
 
-        # Bonus row
+        # ── Row 2: Bonus (cards owned per colour) ────────────────────────────
         bonus = player.get_bonus_count()
-        bx, by2 = px + 10, py + 74
+        bon_y = py + 57
         bl = self.fonts["small"].render("Bonus:", True, DIM_C)
-        s.blit(bl, (bx, by2))
-        bx += 50
+        s.blit(bl, (px + 8, bon_y))
+        bx = px + 52
         for color in COLOR_ORDER:
             amt = bonus[color]
-            pygame.draw.circle(s, GEM[color],      (bx + 7, by2 + 7), 7)
-            pygame.draw.circle(s, GEM_DARK[color], (bx + 7, by2 + 7), 7, 1)
-            n = self.fonts["small"].render(str(amt), True, TEXT_C)
-            s.blit(n, (bx + 17, by2 + 1))
-            bx += 42
+            col = GEM[color] if amt > 0 else tuple(max(0, v - 60) for v in GEM[color])
+            pygame.draw.circle(s, col,              (bx + 6, bon_y + 6), 6)
+            pygame.draw.circle(s, GEM_DARK[color],  (bx + 6, bon_y + 6), 6, 1)
+            n = self.fonts["small"].render(str(amt), True,
+                                           TEXT_C if amt > 0 else DIM_C)
+            s.blit(n, (bx + 14, bon_y))
+            bx += 38
 
-        # Reserved cards
+        # ── Divider ──────────────────────────────────────────────────────────
+        pygame.draw.line(s, DIVIDER, (px + 6, py + 74), (px + pw - 6, py + 74), 1)
+
+        # ── Row 3: Reserved cards ─────────────────────────────────────────────
+        res_label_y = py + 79
+        res_y       = py + 93
         rl = self.fonts["small"].render("Reserved:", True, DIM_C)
-        s.blit(rl, (px + 10, py + ph - 116))
+        s.blit(rl, (px + 8, res_label_y))
+
+        RCARD_W, RCARD_H = 80, 108
         for i, card in enumerate(player.reserved_cards):
-            r   = (self._res_rect(i) if is_human
-                   else (px + 8 + i * 72, py + ph - 98, 68, 90))
+            rx  = px + 6 + i * (RCARD_W + 5)
+            r   = (rx, res_y, RCARD_W, RCARD_H)
+            if is_human:
+                # keep _res_rect aligned for click detection
+                pass
             hl  = (self.mode == UM.BUY_RES and is_human and in_rect(mx2, my2, r))
             can = player.can_afford(card)
             rnd(s, card_bg(card.level, card.color_bonus), r, r=5)
-            bc  = HILITE if hl else (AFFORD_G if can and is_human
-                                     else GEM.get(card.color_bonus, (100,100,100)))
+            border_col = GEM.get(card.color_bonus, border_col := (100,100,100))
+            bc = HILITE if hl else (AFFORD_G if can and is_human else border_col)
             pygame.draw.rect(s, bc, r, 2, border_radius=5)
+            # Bonus gem in top strip
+            strip_col = GEM.get(card.color_bonus, (110, 110, 110))
+            rnd(s, strip_col, (rx, res_y, RCARD_W, 18), r=5)
+            pygame.draw.circle(s, GEM_DARK.get(card.color_bonus, strip_col),
+                               (rx + RCARD_W - 10, res_y + 9), 7)
+            pygame.draw.circle(s, strip_col, (rx + RCARD_W - 10, res_y + 9), 5)
             if card.points > 0:
-                p = self.fonts["small"].render(str(card.points), True, TEXT_C)
-                s.blit(p, (r[0] + 3, r[1] + 2))
-            cy2 = r[1] + 18
+                p = self.fonts["bold"].render(str(card.points), True, TEXT_C)
+                s.blit(p, (rx + 4, res_y + 20))
+            cy2 = res_y + 34
             for color in COLOR_ORDER:
                 a2 = card.cost.get(color, 0)
                 if not a2: continue
-                pygame.draw.circle(s, GEM[color],      (r[0] + 9, cy2 + 5), 5)
-                pygame.draw.circle(s, GEM_DARK[color], (r[0] + 9, cy2 + 5), 5, 1)
+                pygame.draw.circle(s, GEM[color],      (rx + 10, cy2 + 5), 6)
+                pygame.draw.circle(s, GEM_DARK[color], (rx + 10, cy2 + 5), 6, 1)
                 t2 = self.fonts["small"].render(str(a2), True, TEXT_C)
-                s.blit(t2, (r[0] + 17, cy2))
-                cy2 += 13
+                s.blit(t2, (rx + 19, cy2))
+                cy2 += 15
 
-        # Noble tiles owned
+        # ── Row 4: Nobles earned ──────────────────────────────────────────────
+        nob_y = res_y + RCARD_H + 6
         if player.nobles:
+            nb_lbl = self.fonts["small"].render("Nobles:", True, DIM_C)
+            s.blit(nb_lbl, (px + 8, nob_y))
             for i, n in enumerate(player.nobles):
-                nx = px + 10 + i * 30
-                ny = py + ph - 24
-                rnd(s, (155, 140, 106), (nx, ny, 26, 18), r=3)
-                t = self.fonts["small"].render(str(n.points), True, (24, 24, 24))
-                s.blit(t, t.get_rect(center=(nx + 13, ny + 9)))
+                nx2 = px + 60 + i * 36
+                rnd(s, (155, 140, 106), (nx2, nob_y - 2, 32, 22), r=4)
+                t = self.fonts["small"].render(f"+{n.points}", True, (24, 24, 24))
+                s.blit(t, t.get_rect(center=(nx2 + 16, nob_y + 9)))
 
     # ── Status bar ───────────────────────────────────────────────────────────
 
