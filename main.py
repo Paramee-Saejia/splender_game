@@ -70,8 +70,8 @@ HIDDEN_W = 76
 ROW_H    = CARD_H + CARD_GAP        # 160
 BOARD_Y  = 176                       # top of card rows
 
-NOBLE_X, NOBLE_Y = 8, 44
-NOBLE_W, NOBLE_H = 118, 122
+NOBLE_X, NOBLE_Y = 8, 52
+NOBLE_W, NOBLE_H = 118, 120
 
 # Col B – tokens + buttons
 MID_X    = 796
@@ -340,13 +340,15 @@ def draw_card(surf, card, rect, fonts, hl=False, green=False, assets=None):
     hl2 = tuple(min(255, v + 60) for v in gem_col)
     pygame.draw.circle(surf, hl2, (x + w - 16, y + 8), 3)
 
-    # Points (top-left, below strip)
+    # Points: drawn INSIDE the strip (always readable regardless of card colour)
     if card.points > 0:
-        pt = fonts["bold"].render(str(card.points), True, TEXT_C)
-        surf.blit(pt, (x + 5, y + 24))
+        shadow = fonts["bold"].render(str(card.points), True, (20, 14, 6))
+        surf.blit(shadow, (x + 6, y + 4))
+        pt = fonts["bold"].render(str(card.points), True, (255, 252, 220))
+        surf.blit(pt, (x + 5, y + 3))
 
-    # Cost (stacked dots with numbers)
-    cy2 = y + 42
+    # Cost (stacked dots with numbers) — starts below strip
+    cy2 = y + 28
     for color in COLOR_ORDER:
         amt = card.cost.get(color, 0)
         if not amt:
@@ -713,7 +715,7 @@ class SplendorApp:
                 return
 
     def _res_rect(self, slot):
-        res_y = HUMAN_Y + 93
+        res_y = HUMAN_Y + 108
         return (PANEL_X + 6 + slot * 85, res_y, 80, 108)
 
     # ── Pending – return token ────────────────────────────────────────────────
@@ -887,7 +889,7 @@ class SplendorApp:
         pending = (g.get_pending_nobles()
                    if g.get_pending_state() == PENDING_CHOOSE_NOBLE else [])
         lbl = self.fonts["bold"].render("Nobles", True, DIM_C)
-        s.blit(lbl, (NOBLE_X, NOBLE_Y - 16))
+        s.blit(lbl, (NOBLE_X, NOBLE_Y - 20))
         for i, noble in enumerate(g.board.nobles):
             idx = getattr(noble, "_asset_index", i)
             noble_img = self.assets.get(f"noble_{idx}")
@@ -1023,7 +1025,7 @@ class SplendorApp:
         all_c  = COLOR_ORDER + ["gold"]
         pend_r = (self.mode == UM.PEND_RETURN and is_human)
         mx2, my2 = pygame.mouse.get_pos()
-        tok_y  = py + 32
+        tok_y  = py + 44   # pushed down so circles don't overlap the name text
         for i, color in enumerate(all_c):
             amt   = player.tokens.get(color, 0)
             cx    = px + 14 + i * 40
@@ -1045,7 +1047,7 @@ class SplendorApp:
 
         # ── Row 2: Bonus (cards owned per colour) ────────────────────────────
         bonus = player.get_bonus_count()
-        bon_y = py + 57
+        bon_y = py + 70
         bl = self.fonts["small"].render("Bonus:", True, DIM_C)
         s.blit(bl, (px + 8, bon_y))
         bx = px + 52
@@ -1060,11 +1062,11 @@ class SplendorApp:
             bx += 38
 
         # ── Divider ──────────────────────────────────────────────────────────
-        pygame.draw.line(s, DIVIDER, (px + 6, py + 74), (px + pw - 6, py + 74), 1)
+        pygame.draw.line(s, DIVIDER, (px + 6, py + 88), (px + pw - 6, py + 88), 1)
 
         # ── Row 3: Reserved cards ─────────────────────────────────────────────
-        res_label_y = py + 79
-        res_y       = py + 93
+        res_label_y = py + 93
+        res_y       = py + 108
         rl = self.fonts["small"].render("Reserved:", True, DIM_C)
         s.blit(rl, (px + 8, res_label_y))
 
