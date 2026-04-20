@@ -352,8 +352,11 @@ class TestEndGame(unittest.TestCase):
         # Give Alice enough points via high-value cards
         for _ in range(5):
             alice.buy_card(make_card(points=3))  # 15 points total
-        # Trigger end-turn check by taking tokens
+        # Alice's turn: hits 15 — triggers final round, Bob still gets a turn
         game.take_tokens(["white"])
+        self.assertFalse(game.game_over)
+        # Bob's final turn
+        game.take_tokens(["blue"])
         self.assertTrue(game.game_over)
         self.assertEqual(game.winner.name, "Alice")
 
@@ -370,10 +373,14 @@ class TestEndGame(unittest.TestCase):
         alice = game.players[0]
         for _ in range(5):
             alice.buy_card(make_card(points=3))
-        game.take_tokens(["white"])
+        game.take_tokens(["white"])   # Alice triggers final round
+        game.take_tokens(["blue"])    # Bob finishes — game over
         self.assertTrue(game.game_over)
-        # current_player_index should not have changed
-        self.assertEqual(game.current_player_index, 0)
+        prev_index = game.current_player_index
+        # Actions after game over must be rejected
+        result = game.take_tokens(["green"])
+        self.assertFalse(result)
+        self.assertEqual(game.current_player_index, prev_index)
 
 
 class TestTurnOrder(unittest.TestCase):

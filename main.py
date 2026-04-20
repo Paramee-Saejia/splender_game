@@ -510,35 +510,36 @@ class SplendorApp:
         sel  = self.sel_toks
         bank = self.game.board.token_bank
 
-        # Deselect
-        if color in sel and not (len(sel) == 2 and sel[0] == sel[1]):
-            sel.remove(color)
-            self.status = f"Deselected {color}."
-            return
-
-        # 2-same mode
+        # 2-same: clicking the same color a second time → try to take 2
         if sel == [color]:
             if bank.can_take_two_same(color):
                 sel.append(color)
-                self._do_take()   # auto-confirm 2-same
+                self._do_take()
             else:
-                self._toast(f"Need ≥ 4 {color} in bank.", TOAST_WN)
+                self._toast(f"Need ≥ 4 {color} in bank for 2-same.", TOAST_WN)
             return
 
+        # Already committed to a 2-same pair (shouldn't normally be reached)
         if len(sel) == 2 and sel[0] == sel[1]:
-            return   # already confirmed above
+            return
+
+        # Deselect a previously chosen distinct color
+        if color in sel:
+            sel.remove(color)
+            self.status = f"Deselected {color}."
+            return
 
         if bank.tokens.get(color, 0) < 1:
             self._toast(f"No {color} tokens left.", TOAST_WN)
             return
         if len(sel) >= 3:
-            return   # auto-confirmed already
+            return
 
         sel.append(color)
         if len(sel) == 3:
             self._do_take()   # auto-confirm at 3 distinct
         else:
-            self.status = f"Selected: {sel}  –  click more or Confirm."
+            self.status = f"Selected: {sel}  –  click same color again for 2-same, or pick more."
 
     def _do_take(self):
         if not self.sel_toks:
@@ -870,8 +871,13 @@ class SplendorApp:
                     pygame.draw.circle(s, AFFORD_G, (cx, cy), TOKEN_R + 4)
                 gem_circle(s, color, cx, cy, TOKEN_R,
                            label=str(amt), font=self.fonts["bold"])
+                if color == "gold":
+                    star = self.fonts["small"].render("★", True, (50, 34, 0))
+                    s.blit(star, star.get_rect(center=(cx, cy - TOKEN_R + 9)))
 
-            name = self.fonts["small"].render(color[:3].upper(), True, DIM_C)
+            side = "WILD" if color == "gold" else color[:3].upper()
+            name = self.fonts["small"].render(side, True,
+                                              HILITE if color == "gold" else DIM_C)
             s.blit(name, name.get_rect(center=(cx + TOKEN_R + 18, cy)))
 
         # Buttons

@@ -100,6 +100,10 @@ class Game:
         # Populated when the player qualifies for > 1 noble simultaneously.
         self._pending_nobles = []
 
+        # Player index that first hit VICTORY_POINTS; None until that happens.
+        # Used to let remaining players finish their final turn.
+        self._final_round_trigger = None
+
     # ══════════════════════════════════════════════════════════════════════
     #  Properties / Helpers
     # ══════════════════════════════════════════════════════════════════════
@@ -166,6 +170,8 @@ class Game:
         """
         Action: Take tokens from the bank.
 
+        Returns False immediately if the game is already over.
+
         Supports two official Splendor token-taking rules:
           • Take up to 3 different-colored tokens (1 each), provided the
             bank has at least 1 of each chosen color.
@@ -180,6 +186,8 @@ class Game:
                        - For 2-same:     e.g. ["red", "red"]
         :return: bool – True if the action was successful
         """
+        if self.game_over:
+            return False
         self._require_idle()
 
         bank = self.board.token_bank
@@ -504,30 +512,35 @@ class Game:
         """
         Finalize the current turn.
 
-        Checks for a winner (≥ 15 prestige points).  If none, advances to
-        the next player.  If all players have had their final turn after
-        someone hit 15 points the game ends.
-
-        NOTE: This implementation ends the game immediately when a player
-        reaches VICTORY_POINTS.  A more complete version would let the
-        remaining players in the same round finish before declaring a winner.
-        # TODO: implement same-round completion so all players get a final turn
+        Official end-of-game rule: when a player reaches VICTORY_POINTS,
+        every other player in the same round gets one final turn before
+        the winner is declared.  The player with the most points after
+        the final round wins; ties go to the player with fewer cards owned.
         """
         player = self.current_player
 
-        if player.get_points() >= VICTORY_POINTS:
-            self.game_over = True
-            self.winner = player
-            return
+        if player.get_points() >= VICTORY_POINTS and self._final_round_trigger is None:
+            # Mark who triggered the final round; remaining players still play
+            self._final_round_trigger = self.current_player_index
 
         # Advance to the next player
-        self.current_player_index = (
-            (self.current_player_index + 1) % len(self.players)
-        )
+        next_index = (self.current_player_index + 1) % len(self.players)
+        self.current_player_index = next_index
 
         # Increment round counter when we cycle back to the first player
         if self.current_player_index == 0:
             self.round_number += 1
+
+        # If we just completed the final round (everyone has had their last turn)
+        if (self._final_round_trigger is not None
+                and self.current_player_index == self._final_round_trigger):
+            # All players have finished; find the winner
+            best = max(
+                self.players,
+                key=lambda p: (p.get_points(), -len(p.cards_owned))
+            )
+            self.game_over = True
+            self.winner = best
 
     # ══════════════════════════════════════════════════════════════════════
     #  Internal Utility
