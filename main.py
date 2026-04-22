@@ -14,6 +14,7 @@ import os
 import math
 import traceback
 import threading
+import webbrowser
 from game_component.game_factory import create_game
 from game_component.game import IDLE, PENDING_RETURN_TOKENS, PENDING_CHOOSE_NOBLE
 from bot import bot_make_move
@@ -55,6 +56,10 @@ def _load_first_existing(paths, size=None):
 
 _CARD_COUNTS = {1: 8, 2: 6, 3: 4}
 _GEM_COLORS  = ["white", "blue", "green", "red", "black"]
+HOW_TO_PLAY_URLS = {
+    "English Video": "https://youtu.be/rue8-jvbc9I?si=TfT2SNTgTbRNzR7f",
+    "Thai Video":    "https://youtu.be/C-ZkrifmcOg?si=GCs8B34I-2TOsIeY",
+}
 
 def _load_assets():
     base = os.path.join(os.path.dirname(__file__), "assets")
@@ -279,6 +284,20 @@ def btn_rect(row):
 
 def in_game_menu_rect():
     return (SW - 174, SH - 42, 160, 34)
+
+
+def start_help_rect():
+    return (SW - 158, SH - 44, 144, 30)
+
+
+def start_help_panel_rect():
+    hx, hy, hw, _ = start_help_rect()
+    return (hx - 108, hy - 114, hw + 116, 100)
+
+
+def start_help_link_rect(idx):
+    px, py, pw, _ = start_help_panel_rect()
+    return (px + 12, py + 34 + idx * 34, pw - 24, 26)
 
 
 def board_centre():
@@ -531,6 +550,7 @@ class SplendorApp:
         self.fly_toks   = []
         self.fly_cards  = []
         self.toasts     = []   # list of Toast objects
+        self._show_help_links = False
 
     def _new_game(self):
         self.game = create_game("You", "Bot")
@@ -604,6 +624,9 @@ class SplendorApp:
                 self._click(*ev.pos)
 
     def _cancel(self):
+        if self.mode == UM.START and self._show_help_links:
+            self._show_help_links = False
+            return
         if self.mode not in (UM.IDLE, UM.START, UM.BOT_TURN,
                               UM.PEND_RETURN, UM.PEND_NOBLE, UM.GAME_OVER):
             self.mode     = UM.IDLE
@@ -644,6 +667,20 @@ class SplendorApp:
     # ── Start screen ──────────────────────────────────────────────────────────
 
     def _click_start(self, mx, my):
+        if in_rect(mx, my, start_help_rect()):
+            self._show_help_links = not self._show_help_links
+            return
+
+        if self._show_help_links:
+            for i, url in enumerate(HOW_TO_PLAY_URLS.values()):
+                if in_rect(mx, my, start_help_link_rect(i)):
+                    webbrowser.open_new_tab(url)
+                    self._show_help_links = False
+                    return
+            if not in_rect(mx, my, start_help_panel_rect()):
+                self._show_help_links = False
+                return
+
         for name, rect in self._start_btns():
             if in_rect(mx, my, rect):
                 if name == "play":
@@ -1056,6 +1093,25 @@ class SplendorApp:
         s.blit(hint_bg, hint_bg.get_rect(center=hint_r.center))
         s.blit(hint, hint_r)
 
+        help_r = start_help_rect()
+        draw_button(s, "How to Play", help_r, self.fonts,
+                    "hover" if in_rect(mx, my, help_r) else "normal")
+
+        if self._show_help_links:
+            px, py, pw, ph = start_help_panel_rect()
+            panel = pygame.Surface((pw, ph), pygame.SRCALPHA)
+            pygame.draw.rect(panel, (0, 0, 0, 188), (0, 0, pw, ph), border_radius=10)
+            pygame.draw.rect(panel, (96, 76, 36, 200), (0, 0, pw, ph), 1, border_radius=10)
+            s.blit(panel, (px, py))
+
+            title = self.fonts["bold"].render("How to play Splendor", True, TEXT_C)
+            s.blit(title, (px + 12, py + 9))
+
+            for i, label in enumerate(HOW_TO_PLAY_URLS.keys()):
+                lr = start_help_link_rect(i)
+                draw_button(s, label, lr, self.fonts,
+                            "hover" if in_rect(mx, my, lr) else "normal")
+
     def _draw_stats(self):
         s  = self.screen
         mx, my = pygame.mouse.get_pos()
@@ -1337,9 +1393,6 @@ class SplendorApp:
             msg = "Over 10 tokens — click a token in YOUR panel to return one."
         elif gp == PENDING_CHOOSE_NOBLE:
             msg = "Multiple nobles qualify — click a noble tile to accept one."
-
-        pygame.draw.rect(s, (14, 10, 8), (0, STATUS_Y - 6, SW, SH - STATUS_Y + 6))
-        pygame.draw.line(s, DIVIDER, (0, STATUS_Y - 6), (SW, STATUS_Y - 6), 1)
 
         msg_surf = self.fonts["normal"].render(msg, True, TEXT_C)
         bubble_w = min(720, msg_surf.get_width() + 26)
