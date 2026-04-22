@@ -327,6 +327,10 @@ The start screen includes optional links to external YouTube tutorial videos for
 - **Link:** https://youtu.be/C-ZkrifmcOg?si=GCs8B34I-2TOsIeY  
 - **License / Permission:** External reference link only; copyright remains with the original creator
 
+### GitHub Contributor Note
+
+On GitHub, `Claude` may appear in the contributor or commit history view because some earlier commits were created with a `Co-Authored-By: Claude ...` footer when Claude was used to help produce commit messages or commit metadata. This does not mean Claude is an official team member or project owner; it only reflects how those earlier commits were recorded in Git history.
+
 Suggested format:
 
 - **Asset/Material:**  
