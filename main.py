@@ -324,7 +324,12 @@ def draw_card(surf, card, rect, fonts, hl=False, green=False, assets=None):
     rnd(surf, bg, rect, r=7)
     card_img = assets.get(f"card_bg_L{card.level}") if assets else None
     if card_img:
-        surf.blit(card_img, (x, y))
+        tmp = pygame.Surface((w, h), pygame.SRCALPHA)
+        tmp.blit(card_img, (0, 0))
+        mask = pygame.Surface((w, h), pygame.SRCALPHA)
+        pygame.draw.rect(mask, (255, 255, 255, 255), (0, 0, w, h), border_radius=7)
+        tmp.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        surf.blit(tmp, (x, y))
     if hl:
         pygame.draw.rect(surf, HILITE, rect, 3, border_radius=7)
     elif green:
@@ -380,7 +385,13 @@ def draw_noble(surf, noble, rect, fonts, hl=False, noble_img=None):
     x, y, _, _ = rect
     rnd(surf, (155, 140, 106), rect, r=7)
     if noble_img:
-        surf.blit(noble_img, (x, y))
+        nw, nh = rect[2], rect[3]
+        tmp = pygame.Surface((nw, nh), pygame.SRCALPHA)
+        tmp.blit(noble_img, (0, 0))
+        mask = pygame.Surface((nw, nh), pygame.SRCALPHA)
+        pygame.draw.rect(mask, (255, 255, 255, 255), (0, 0, nw, nh), border_radius=7)
+        tmp.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        surf.blit(tmp, (x, y))
     pygame.draw.rect(surf, HILITE if hl else (116, 104, 76), rect, 2 if not hl else 3, border_radius=7)
     pt = fonts["bold"].render(str(noble.points), True, (24, 24, 24))
     surf.blit(pt, (x + 5, y + 5))

@@ -32,7 +32,10 @@ def create_game(player_name="You", bot_name="Bot"):
     ]
 
     noble_pool = [Noble(dict(req), pts) for req, pts in NOBLES]
-    nobles = random.sample(noble_pool, 3)
+    indices = random.sample(range(len(noble_pool)), 3)
+    nobles = [noble_pool[i] for i in indices]
+    for noble, idx in zip(nobles, indices):
+        noble._asset_index = idx
 
     bank = TokenBank(tokens_per_color=4)
 
