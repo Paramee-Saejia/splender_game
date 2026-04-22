@@ -40,16 +40,25 @@ def _load_img(path, size=None):
         img = pygame.transform.smoothscale(img, size)
     return img
 
+_CARD_COUNTS = {1: 8, 2: 6, 3: 4}
+_GEM_COLORS  = ["white", "blue", "green", "red", "black"]
+
 def _load_assets():
     base = os.path.join(os.path.dirname(__file__), "assets")
     assets = {}
-    assets["bg"] = _load_img(os.path.join(base, "bg.png"), (1280, 720))
-    for color in ["white", "blue", "green", "red", "black", "gold"]:
+    assets["bg"]       = _load_img(os.path.join(base, "bg.png"),       (1280, 720))
+    assets["start_bg"] = _load_img(os.path.join(base, "start_bg.png"), (1280, 720))
+    for color in _GEM_COLORS + ["gold"]:
         assets[f"token_{color}"] = _load_img(
             os.path.join(base, f"token_{color}.png"), (52, 52))
-    for lv in [1, 2, 3]:
+    # Per-card images (card_L{level}_{color}_{index}.png); fall back to card_bg_L{level}.png
+    for lv, count in _CARD_COUNTS.items():
         assets[f"card_bg_L{lv}"] = _load_img(
             os.path.join(base, f"card_bg_L{lv}.png"), (148, 152))
+        for color in _GEM_COLORS:
+            for i in range(count):
+                key = f"card_L{lv}_{color}_{i}"
+                assets[key] = _load_img(os.path.join(base, f"{key}.png"), (148, 152))
     for i in range(10):
         assets[f"noble_{i}"] = _load_img(
             os.path.join(base, f"noble_{i}.png"), (118, 122))
@@ -327,7 +336,11 @@ def draw_card(surf, card, rect, fonts, hl=False, green=False, assets=None):
     border = GEM.get(card.color_bonus, (110, 110, 110))
 
     rnd(surf, bg, rect, r=7)
-    card_img = assets.get(f"card_bg_L{card.level}") if assets else None
+    card_img = None
+    if assets:
+        idx = getattr(card, "_image_index", 0)
+        card_img = (assets.get(f"card_L{card.level}_{card.color_bonus}_{idx}")
+                    or assets.get(f"card_bg_L{card.level}"))
     if card_img:
         tmp = pygame.Surface((w, h), pygame.SRCALPHA)
         tmp.blit(card_img, (0, 0))
@@ -877,7 +890,10 @@ class SplendorApp:
 
     def _draw_start(self):
         s = self.screen
-        s.fill((16, 12, 8))
+        if self.assets.get("start_bg"):
+            s.blit(self.assets["start_bg"], (0, 0))
+        else:
+            s.fill((16, 12, 8))
 
         title = self.fonts["title"].render("SPLENDOR", True, HILITE)
         s.blit(title, title.get_rect(center=(SW // 2, SH // 2 - 100)))

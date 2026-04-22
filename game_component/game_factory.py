@@ -13,7 +13,14 @@ from game_component.cards_data import LEVEL_1, LEVEL_2, LEVEL_3, NOBLES
 
 
 def _build_deck(level, raw_list):
-    cards = [Card(level, bonus, dict(cost), pts) for bonus, cost, pts in raw_list]
+    cards = []
+    color_counter = {}
+    for bonus, cost, pts in raw_list:
+        idx = color_counter.get(bonus, 0)
+        color_counter[bonus] = idx + 1
+        card = Card(level, bonus, dict(cost), pts)
+        card._image_index = idx
+        cards.append(card)
     return Deck(level, cards)
 
 
