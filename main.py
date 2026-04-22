@@ -13,9 +13,13 @@ import sys
 import os
 import math
 import traceback
+import threading
 from game_component.game_factory import create_game
 from game_component.game import IDLE, PENDING_RETURN_TOKENS, PENDING_CHOOSE_NOBLE
 from bot import bot_make_move
+from data_logger import DataLogger
+from bot_sim import run_simulations
+from stats_view import draw_stats_screen
 
 # ── Image assets (optional — place files in assets/ to enable) ────────────────
 # Expected files:
@@ -457,6 +461,7 @@ class UM:
     PEND_NOBLE  = "PEND_NOBLE"
     BOT_TURN    = "BOT_TURN"
     GAME_OVER   = "GAME_OVER"
+    STATS       = "STATS"
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
@@ -471,6 +476,13 @@ class SplendorApp:
         self.clock  = pygame.time.Clock()
 
         self.assets = _load_assets()
+
+        # ── Statistics / simulation state ─────────────────────────────────
+        self._logger       = DataLogger()
+        self._stats_rows   = self._logger.load_all()
+        self._sim_running  = False
+        self._sim_progress = (0, 0)
+        self._game_logged  = False   # prevents double-logging per match
 
         self.fonts = {
             "title":  pygame.font.SysFont("segoeui", 38, bold=True),
@@ -497,8 +509,35 @@ class SplendorApp:
     def _new_game(self):
         self.game = create_game("You", "Bot")
         self._reset_state()
+        self._game_logged = False
         self.mode   = UM.IDLE
         self.status = "Your turn — choose an action."
+
+    # ── Statistics helpers ────────────────────────────────────────────────────
+
+    def _log_match(self):
+        if not self._game_logged and self.game and self.game.game_over:
+            try:
+                self._logger.log(self.game)
+                self._stats_rows = self._logger.load_all()
+            except Exception:
+                traceback.print_exc()
+            self._game_logged = True
+
+    def _start_sim(self, n=100):
+        if self._sim_running:
+            return
+        self._sim_running  = True
+        self._sim_progress = (0, n)
+
+        def worker():
+            def on_prog(done, total):
+                self._sim_progress = (done, total)
+            run_simulations(n, self._logger, on_progress=on_prog)
+            self._stats_rows  = self._logger.load_all()
+            self._sim_running = False
+
+        threading.Thread(target=worker, daemon=True).start()
 
     # ── Toast helper ──────────────────────────────────────────────────────────
 
@@ -549,6 +588,8 @@ class SplendorApp:
 
         if m == UM.START:
             self._click_start(mx, my); return
+        if m == UM.STATS:
+            self._click_stats(mx, my); return
         if m == UM.GAME_OVER:
             self.mode = UM.START; return
         if gp == PENDING_CHOOSE_NOBLE:
@@ -571,13 +612,31 @@ class SplendorApp:
     # ── Start screen ──────────────────────────────────────────────────────────
 
     def _click_start(self, mx, my):
-        r = self._start_btn_rect()
-        if in_rect(mx, my, r):
-            self._new_game()
+        for name, rect in self._start_btns():
+            if in_rect(mx, my, rect):
+                if name == "play":
+                    self._new_game()
+                elif name == "stats":
+                    self.mode = UM.STATS
+                elif name == "sim":
+                    self._start_sim(100)
+                return
 
-    def _start_btn_rect(self):
-        bw, bh = 260, 54
-        return (SW // 2 - bw // 2, SH // 2 + 30, bw, bh)
+    def _start_btns(self):
+        bw, cx = 300, SW // 2
+        return [
+            ("play",  (cx - bw // 2, SH // 2 - 10, bw, 52)),
+            ("stats", (cx - bw // 2, SH // 2 + 72,  bw, 42)),
+            ("sim",   (cx - bw // 2, SH // 2 + 124, bw, 42)),
+        ]
+
+    def _click_stats(self, mx, my):
+        back = (14, SH - 42, 160, 34)
+        sim  = (SW - 214, SH - 42, 200, 34)
+        if in_rect(mx, my, back):
+            self.mode = UM.START
+        elif in_rect(mx, my, sim) and not self._sim_running:
+            self._start_sim(100)
 
     # ── Buttons ───────────────────────────────────────────────────────────────
 
@@ -801,6 +860,7 @@ class SplendorApp:
         self.mode = UM.IDLE
         g = self.game
         if g.game_over:
+            self._log_match()
             self.mode = UM.GAME_OVER; return
 
         gp = g.get_pending_state()
@@ -823,6 +883,7 @@ class SplendorApp:
     def _after_bot(self):
         g = self.game
         if g.game_over:
+            self._log_match()
             self.mode = UM.GAME_OVER; return
         if g.get_pending_state() != IDLE:
             # shouldn't happen (bot resolves own pending states)
@@ -876,6 +937,8 @@ class SplendorApp:
             self.screen.fill(BG)
         if self.mode == UM.START:
             self._draw_start(); return
+        if self.mode == UM.STATS:
+            self._draw_stats(); return
 
         self._draw_title()
         self._draw_nobles()
@@ -897,26 +960,75 @@ class SplendorApp:
         else:
             s.fill((16, 12, 8))
 
-        title = self.fonts["title"].render("SPLENDOR", True, HILITE)
-        s.blit(title, title.get_rect(center=(SW // 2, SH // 2 - 100)))
+        # Dark overlay so text is always readable
+        ov = pygame.Surface((SW, SH), pygame.SRCALPHA)
+        ov.fill((0, 0, 0, 110))
+        s.blit(ov, (0, 0))
+
+        cx = SW // 2
+        # Title
+        for dx, dy in ((-2, 2), (2, 2)):
+            sh = self.fonts["title"].render("SPLENDOR", True, (0, 0, 0))
+            s.blit(sh, sh.get_rect(center=(cx + dx, SH // 2 - 138 + dy)))
+        s.blit(self.fonts["title"].render("SPLENDOR", True, HILITE),
+               self.fonts["title"].render("SPLENDOR", True, HILITE).get_rect(center=(cx, SH // 2 - 138)))
 
         sub = self.fonts["large"].render("Human  vs  Bot", True, TEXT_C)
-        s.blit(sub, sub.get_rect(center=(SW // 2, SH // 2 - 44)))
+        s.blit(sub, sub.get_rect(center=(cx, SH // 2 - 92)))
 
-        desc = self.fonts["normal"].render(
-            "Collect gem tokens · Buy development cards · Attract nobles · Reach 15 prestige points",
+        desc = self.fonts["small"].render(
+            "Collect gems  ·  Buy cards  ·  Attract nobles  ·  Reach 15 prestige points",
             True, DIM_C)
-        s.blit(desc, desc.get_rect(center=(SW // 2, SH // 2 - 4)))
+        s.blit(desc, desc.get_rect(center=(cx, SH // 2 - 58)))
 
+        # Separator line
+        pygame.draw.line(s, (80, 64, 40), (cx - 160, SH // 2 - 36), (cx + 160, SH // 2 - 36), 1)
+
+        # Buttons
         mx, my = pygame.mouse.get_pos()
-        r      = self._start_btn_rect()
-        state  = "hover" if in_rect(mx, my, r) else "normal"
-        draw_button(s, "▶   Start Game", r, self.fonts,
-                    "hover" if state == "hover" else "active")
+        btn_defs = [
+            ("play",  "▶   Start Game",          BTN_A,   (60, 180, 100)),
+            ("stats", "📊  View Statistics",      BTN_N,   BTN_H_C),
+            ("sim",   "⚙   Run 100 Simulations",  BTN_DIS, (70, 70, 90)),
+        ]
+        for name, label, col_n, col_h in btn_defs:
+            r = dict(self._start_btns())[name]
+            hov = in_rect(mx, my, r)
+            col = col_h if hov else col_n
+            if name == "sim" and self._sim_running:
+                col = BTN_DIS
+                label = f"Simulating… {self._sim_progress[0]}/{self._sim_progress[1]}"
+            rnd(s, col, r, r=8)
+            t = self.fonts["bold" if name == "play" else "normal"].render(label, True, TEXT_C)
+            s.blit(t, t.get_rect(center=(r[0] + r[2] // 2, r[1] + r[3] // 2)))
 
-        hint = self.fonts["small"].render("2-player rules · 4 gems per colour · 3 nobles · 15 pts to win",
-                                          True, DIM_C)
-        s.blit(hint, hint.get_rect(center=(SW // 2, SH // 2 + 108)))
+        n_matches = len(self._stats_rows)
+        hint = self.fonts["small"].render(
+            f"{n_matches} matches recorded  ·  2-player  ·  4 gems  ·  15 pts to win", True, DIM_C)
+        s.blit(hint, hint.get_rect(center=(cx, SH // 2 + 178)))
+
+    def _draw_stats(self):
+        s  = self.screen
+        mx, my = pygame.mouse.get_pos()
+
+        draw_stats_screen(s, self._stats_rows, self.fonts, SW, SH,
+                          self._sim_running, self._sim_progress)
+
+        # Back button
+        back_r = (14, SH - 42, 160, 34)
+        rnd(s, BTN_H_C if in_rect(mx, my, back_r) else BTN_N, back_r, r=7)
+        t = self.fonts["normal"].render("← Back to Menu", True, TEXT_C)
+        s.blit(t, t.get_rect(center=(back_r[0] + back_r[2] // 2, back_r[1] + back_r[3] // 2)))
+
+        # Sim button
+        sim_r   = (SW - 224, SH - 42, 210, 34)
+        running = self._sim_running
+        sim_col = BTN_DIS if running else (BTN_H_C if in_rect(mx, my, sim_r) else BTN_N)
+        rnd(s, sim_col, sim_r, r=7)
+        sim_lbl = (f"Simulating… {self._sim_progress[0]}/{self._sim_progress[1]}"
+                   if running else "Run 100 More Sims")
+        t2 = self.fonts["normal"].render(sim_lbl, True, TEXT_C)
+        s.blit(t2, t2.get_rect(center=(sim_r[0] + sim_r[2] // 2, sim_r[1] + sim_r[3] // 2)))
 
     # ── Title ────────────────────────────────────────────────────────────────
 

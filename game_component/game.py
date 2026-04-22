@@ -104,6 +104,9 @@ class Game:
         # Used to let remaining players finish their final turn.
         self._final_round_trigger = None
 
+        # Per-match statistics (populated by setup())
+        self.match_stats = {}
+
     # ══════════════════════════════════════════════════════════════════════
     #  Properties / Helpers
     # ══════════════════════════════════════════════════════════════════════
@@ -144,10 +147,20 @@ class Game:
         for deck in self.board.decks:
             deck.shuffle()
             deck.setup_face_up()
+        self._init_match_stats()
 
     # ══════════════════════════════════════════════════════════════════════
     #  Guard helper
     # ══════════════════════════════════════════════════════════════════════
+
+    def _init_match_stats(self):
+        gem_colors = ["white", "blue", "green", "red", "black"]
+        self.match_stats = {
+            "turns":        0,
+            "gold_spent":   {p.name: 0 for p in self.players},
+            "gems_taken":   {p.name: {c: 0 for c in gem_colors} for p in self.players},
+            "tiers_bought": {p.name: {1: 0, 2: 0, 3: 0} for p in self.players},
+        }
 
     def _require_idle(self):
         """
@@ -233,6 +246,12 @@ class Game:
         else:
             # Invalid selection
             return False
+
+        # Track gems taken (only reachable after a successful action)
+        gt = self.match_stats.get("gems_taken", {}).get(player.name, {})
+        for c in colors:
+            if c in gt:
+                gt[c] += 1
 
         # ── Post-action: check token limit ────────────────────────────────
         self._after_action()
@@ -351,6 +370,11 @@ class Game:
         # Return spent tokens to bank
         self.board.token_bank.return_tokens(spent)
 
+        # Track purchase stats
+        ms = self.match_stats
+        ms["gold_spent"][player.name]          += spent.get("gold", 0)
+        ms["tiers_bought"][player.name][card.level] += 1
+
         # ── Post-action: check nobles then end turn ───────────────────────
         self._after_action()
         return True
@@ -380,6 +404,11 @@ class Game:
 
         # Return spent tokens to bank
         self.board.token_bank.return_tokens(spent)
+
+        # Track purchase stats
+        ms = self.match_stats
+        ms["gold_spent"][player.name]          += spent.get("gold", 0)
+        ms["tiers_bought"][player.name][card.level] += 1
 
         self._after_action()
         return True
@@ -509,14 +538,9 @@ class Game:
             self._pending_state = PENDING_CHOOSE_NOBLE
 
     def _end_turn(self):
-        """
-        Finalize the current turn.
+        if self.match_stats:
+            self.match_stats["turns"] += 1
 
-        Official end-of-game rule: when a player reaches VICTORY_POINTS,
-        every other player in the same round gets one final turn before
-        the winner is declared.  The player with the most points after
-        the final round wins; ties go to the player with fewer cards owned.
-        """
         player = self.current_player
 
         if player.get_points() >= VICTORY_POINTS and self._final_round_trigger is None:
