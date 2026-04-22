@@ -275,7 +275,11 @@ def gem_circle(surf, color_name, cx, cy, r=TOKEN_R, label="", font=None, alpha=2
                img=None):
     if img:
         size = r * 2
-        scaled = pygame.transform.smoothscale(img, (size, size))
+        scaled = pygame.transform.smoothscale(img, (size, size)).convert_alpha()
+        # Clip image to circle so non-transparent backgrounds don't show
+        mask = pygame.Surface((size, size), pygame.SRCALPHA)
+        pygame.draw.circle(mask, (255, 255, 255, 255), (r, r), r)
+        scaled.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
         if alpha < 255:
             scaled.set_alpha(alpha)
         surf.blit(scaled, (cx - r, cy - r))
@@ -393,7 +397,10 @@ def draw_noble(surf, noble, rect, fonts, hl=False, noble_img=None):
         tmp.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
         surf.blit(tmp, (x, y))
     pygame.draw.rect(surf, HILITE if hl else (116, 104, 76), rect, 2 if not hl else 3, border_radius=7)
-    pt = fonts["bold"].render(str(noble.points), True, (24, 24, 24))
+    for dx, dy in ((-1,0),(1,0),(0,-1),(0,1)):
+        sh = fonts["bold"].render(str(noble.points), True, (0, 0, 0))
+        surf.blit(sh, (x + 5 + dx, y + 5 + dy))
+    pt = fonts["bold"].render(str(noble.points), True, (255, 255, 255))
     surf.blit(pt, (x + 5, y + 5))
     cy2 = y + 26
     for color, amt in noble.requirement.items():
