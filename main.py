@@ -44,6 +44,15 @@ def _load_img(path, size=None):
         img = pygame.transform.smoothscale(img, size)
     return img
 
+
+def _load_first_existing(paths, size=None):
+    """Try multiple asset paths and return the first image that exists."""
+    for path in paths:
+        img = _load_img(path, size)
+        if img is not None:
+            return img
+    return None
+
 _CARD_COUNTS = {1: 8, 2: 6, 3: 4}
 _GEM_COLORS  = ["white", "blue", "green", "red", "black"]
 
@@ -55,16 +64,20 @@ def _load_assets():
     for color in _GEM_COLORS + ["gold"]:
         assets[f"token_{color}"] = _load_img(
             os.path.join(base, f"token_{color}.png"), (52, 52))
-    # Per-card images (card_L{level}_{color}_{index}.png); fall back to card_bg_L{level}.png
+    # Per-card images: support both generated names and legacy fallback names.
     for lv, count in _CARD_COUNTS.items():
         card_dir = os.path.join(base, "cards", f"L{lv}")
-        assets[f"card_bg_L{lv}"] = _load_img(
-            os.path.join(card_dir, "bg.png"), (148, 152))
+        assets[f"card_bg_L{lv}"] = _load_first_existing([
+            os.path.join(card_dir, "bg.png"),
+            os.path.join(base, f"card_bg_L{lv}.png"),
+        ], (148, 152))
         for color in _GEM_COLORS:
             for i in range(count):
                 key = f"card_L{lv}_{color}_{i}"
-                assets[key] = _load_img(
-                    os.path.join(card_dir, f"{color}_{i}.png"), (148, 152))
+                assets[key] = _load_first_existing([
+                    os.path.join(card_dir, f"card_L{lv}_{color}_{i}.png"),
+                    os.path.join(card_dir, f"{color}_{i}.png"),
+                ], (148, 152))
     for i in range(10):
         assets[f"noble_{i}"] = _load_img(
             os.path.join(base, f"noble_{i}.png"), (118, 122))
@@ -264,6 +277,10 @@ def btn_rect(row):
     return (BTN_X, BTN_Y0 + row * BTN_DY, BTN_W, BTN_H)
 
 
+def in_game_menu_rect():
+    return (SW - 174, SH - 42, 160, 34)
+
+
 def board_centre():
     bx = BOARD_X + (BOARD_X + HIDDEN_W + CARD_GAP + 4 * (CARD_W + CARD_GAP)) // 2
     by = BOARD_Y + 3 * ROW_H // 2
@@ -336,6 +353,20 @@ def draw_star(surf, cx, cy, r_outer, r_inner, color):
     pygame.draw.polygon(surf, color, pts)
 
 
+def draw_cost_badge(surf, color, amount, x, y, fonts, radius=8):
+    """Draw a readable gem-cost row with a dark backing plate."""
+    plate = (x - 2, y - 1, 30, 15)
+    rnd(surf, (10, 10, 10), plate, r=5)
+    pygame.draw.rect(surf, (92, 80, 60), plate, 1, border_radius=5)
+    pygame.draw.circle(surf, GEM[color], (x + 6, y + 6), radius)
+    pygame.draw.circle(surf, GEM_DARK[color], (x + 6, y + 6), radius, 1)
+    txt = fonts["small"].render(str(amount), True, (255, 255, 255))
+    for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+        sh = fonts["small"].render(str(amount), True, (0, 0, 0))
+        surf.blit(sh, (x + 17 + dx, y + dy))
+    surf.blit(txt, (x + 17, y))
+
+
 def draw_card(surf, card, rect, fonts, hl=False, green=False, assets=None):
     x, y, w, h = rect
     bg = card_bg(card.level, card.color_bonus)
@@ -383,10 +414,7 @@ def draw_card(surf, card, rect, fonts, hl=False, green=False, assets=None):
         amt = card.cost.get(color, 0)
         if not amt:
             continue
-        pygame.draw.circle(surf, GEM[color],      (x + 11, cy2 + 6), 8)
-        pygame.draw.circle(surf, GEM_DARK[color], (x + 11, cy2 + 6), 8, 1)
-        n = fonts["small"].render(str(amt), True, TEXT_C)
-        surf.blit(n, (x + 23, cy2))
+        draw_cost_badge(surf, color, amt, x + 5, cy2, fonts, radius=8)
         cy2 += 19
 
 
@@ -596,6 +624,8 @@ class SplendorApp:
         if m == UM.STATS:
             self._click_stats(mx, my); return
         if m == UM.GAME_OVER:
+            self.mode = UM.START; return
+        if self.game and in_rect(mx, my, in_game_menu_rect()):
             self.mode = UM.START; return
         if gp == PENDING_CHOOSE_NOBLE:
             self._click_noble(mx, my); return
@@ -1270,10 +1300,7 @@ class SplendorApp:
             for color in COLOR_ORDER:
                 a2 = card.cost.get(color, 0)
                 if not a2: continue
-                pygame.draw.circle(s, GEM[color],      (rx + 10, cy2 + 5), 6)
-                pygame.draw.circle(s, GEM_DARK[color], (rx + 10, cy2 + 5), 6, 1)
-                t2 = self.fonts["small"].render(str(a2), True, TEXT_C)
-                s.blit(t2, (rx + 19, cy2))
+                draw_cost_badge(s, color, a2, rx + 4, cy2, self.fonts, radius=6)
                 cy2 += 15
 
         # ── Row 4: Nobles earned ──────────────────────────────────────────────
@@ -1293,6 +1320,7 @@ class SplendorApp:
         s  = self.screen
         g  = self.game
         gp = g.get_pending_state()
+        mx, my = pygame.mouse.get_pos()
 
         msg = self.status
         if gp == PENDING_RETURN_TOKENS:
@@ -1300,7 +1328,21 @@ class SplendorApp:
         elif gp == PENDING_CHOOSE_NOBLE:
             msg = "Multiple nobles qualify — click a noble tile to accept one."
 
-        shadowed_text(s, msg, (12, STATUS_Y + 10), self.fonts["normal"], TEXT_C)
+        pygame.draw.rect(s, (14, 10, 8), (0, STATUS_Y - 6, SW, SH - STATUS_Y + 6))
+        pygame.draw.line(s, DIVIDER, (0, STATUS_Y - 6), (SW, STATUS_Y - 6), 1)
+
+        msg_surf = self.fonts["normal"].render(msg, True, TEXT_C)
+        bubble_w = min(720, msg_surf.get_width() + 26)
+        bubble = pygame.Surface((bubble_w, 28), pygame.SRCALPHA)
+        pygame.draw.rect(bubble, (0, 0, 0, 145), (0, 0, bubble_w, 28), border_radius=8)
+        pygame.draw.rect(bubble, (92, 80, 60, 185), (0, 0, bubble_w, 28), 1, border_radius=8)
+        s.blit(bubble, (10, STATUS_Y + 4))
+        shadowed_text(s, msg, (22, STATUS_Y + 11), self.fonts["normal"], TEXT_C)
+
+        menu_r = in_game_menu_rect()
+        rnd(s, BTN_H_C if in_rect(mx, my, menu_r) else BTN_N, menu_r, r=7)
+        t = self.fonts["normal"].render("Back to Menu", True, TEXT_C)
+        s.blit(t, t.get_rect(center=(menu_r[0] + menu_r[2] // 2, menu_r[1] + menu_r[3] // 2)))
 
     # ── Animations ───────────────────────────────────────────────────────────
 
