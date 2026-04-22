@@ -108,33 +108,46 @@ def _reserve_score(player, opponent, card, nobles, gold_available):
     )
 
 
-def _pick_reserve_target(game, player, opponent, face_up):
+def _reserve_urgency(player, opponent, card, gold_available):
+    shortage = _shortage(player, card)
+    opponent_threat = bool(opponent and opponent.can_afford(card))
+    close_with_gold = gold_available and shortage <= 1 and card.points >= 2
+    premium_card = card.points >= 5
+    return opponent_threat or close_with_gold or premium_card
+
+
+def _pick_reserve_target(game, player, opponent, face_up, urgent_only=False):
     if not player.can_reserve():
         return None
 
     nobles = game.board.nobles
     gold_available = game.board.token_bank.tokens.get("gold", 0) > 0
+    reserved_count = len(player.reserved_cards)
     candidates = []
     for card, level, idx in face_up:
         if player.can_afford(card):
             continue
         score = _reserve_score(player, opponent, card, nobles, gold_available)
-        candidates.append((score, card, level, idx))
+        shortage = _shortage(player, card)
+        urgent = _reserve_urgency(player, opponent, card, gold_available)
+        routine = (
+            gold_available
+            and reserved_count == 0
+            and shortage <= 2
+            and (card.points >= 3 or score >= 28)
+        )
+        if urgent_only and not urgent:
+            continue
+        if not urgent and not routine:
+            continue
+        score -= reserved_count * 6.0
+        candidates.append((score, card, level, idx, urgent))
 
     if not candidates:
         return None
 
-    score, card, level, idx = max(candidates, key=lambda item: item[0])
-    shortage = _shortage(player, card)
-    should_reserve = (
-        card.points >= 3
-        or shortage <= 2
-        or (opponent and opponent.can_afford(card))
-        or score >= 20
-    )
-    if not should_reserve:
-        return None
-    return card, level, idx
+    score, card, level, idx, urgent = max(candidates, key=lambda item: item[0])
+    return card, level, idx, urgent
 
 
 def _pick_targets(game, player, face_up):
@@ -286,9 +299,9 @@ def bot_make_move(game):
             _resolve_pending(game)
             return True
 
-    reserve_target = _pick_reserve_target(game, player, opponent, face_up)
+    reserve_target = _pick_reserve_target(game, player, opponent, face_up, urgent_only=True)
     if reserve_target:
-        _, level, idx = reserve_target
+        _, level, idx, _ = reserve_target
         ok = game.reserve_card(level, idx)
         if ok:
             _resolve_pending(game)
@@ -304,6 +317,14 @@ def bot_make_move(game):
     if _take_any(game):
         _resolve_pending(game)
         return True
+
+    reserve_target = _pick_reserve_target(game, player, opponent, face_up, urgent_only=False)
+    if reserve_target:
+        _, level, idx, _ = reserve_target
+        ok = game.reserve_card(level, idx)
+        if ok:
+            _resolve_pending(game)
+            return True
 
     if player.can_reserve():
         for deck in sorted(game.board.decks, key=lambda d: d.level, reverse=True):

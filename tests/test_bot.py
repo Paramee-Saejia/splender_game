@@ -35,6 +35,7 @@ class TestBotStrategy(unittest.TestCase):
         game = make_game()
         target = make_card(level=3, bonus="blue", cost={"blue": 4}, points=4)
         game.board.decks[2].face_up[0] = target
+        game.players[0].add_token("blue", 3)
 
         moved = bot_make_move(game)
 
@@ -71,6 +72,18 @@ class TestBotStrategy(unittest.TestCase):
         self.assertTrue(moved)
         self.assertNotIn(threat, game.board.decks[1].face_up)
         self.assertIn(threat, player.reserved_cards)
+
+    def test_bot_prefers_taking_tokens_over_routine_reserve(self):
+        game = make_game()
+        player = game.players[0]
+        target = make_card(level=3, bonus="blue", cost={"blue": 7}, points=4)
+        game.board.decks[2].face_up[0] = target
+
+        moved = bot_make_move(game)
+
+        self.assertTrue(moved)
+        self.assertEqual(len(player.reserved_cards), 0)
+        self.assertGreater(sum(player.tokens[c] for c in ("white", "blue", "green", "red", "black")), 0)
 
 
 if __name__ == "__main__":
