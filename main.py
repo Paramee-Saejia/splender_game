@@ -276,9 +276,10 @@ def gem_circle(surf, color_name, cx, cy, r=TOKEN_R, label="", font=None, alpha=2
     if img:
         size = r * 2
         scaled = pygame.transform.smoothscale(img, (size, size)).convert_alpha()
-        # Clip image to circle so non-transparent backgrounds don't show
+        # Clip to a smaller radius to strip the white border ring from the image
+        clip_r = max(r - 4, 1)
         mask = pygame.Surface((size, size), pygame.SRCALPHA)
-        pygame.draw.circle(mask, (255, 255, 255, 255), (r, r), r)
+        pygame.draw.circle(mask, (255, 255, 255, 255), (r, r), clip_r)
         scaled.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
         if alpha < 255:
             scaled.set_alpha(alpha)
@@ -349,11 +350,12 @@ def draw_card(surf, card, rect, fonts, hl=False, green=False, assets=None):
     hl2 = tuple(min(255, v + 60) for v in gem_col)
     pygame.draw.circle(surf, hl2, (x + w - 16, y + 8), 3)
 
-    # Points: drawn INSIDE the strip (always readable regardless of card colour)
+    # Points: white text with black outline — visible on any card colour
     if card.points > 0:
-        shadow = fonts["bold"].render(str(card.points), True, (20, 14, 6))
-        surf.blit(shadow, (x + 6, y + 4))
-        pt = fonts["bold"].render(str(card.points), True, (255, 252, 220))
+        for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            sh = fonts["bold"].render(str(card.points), True, (0, 0, 0))
+            surf.blit(sh, (x + 5 + dx, y + 3 + dy))
+        pt = fonts["bold"].render(str(card.points), True, (255, 255, 255))
         surf.blit(pt, (x + 5, y + 3))
 
     # Cost (stacked dots with numbers) — starts below strip
@@ -409,6 +411,14 @@ def draw_noble(surf, noble, rect, fonts, hl=False, noble_img=None):
         n = fonts["small"].render(str(amt), True, (24, 24, 24))
         surf.blit(n, (x + 25, cy2))
         cy2 += 20
+
+
+def shadowed_text(surf, text, pos, font, color=TEXT_C, shadow=(0, 0, 0)):
+    """Render text with a 1-px drop shadow for legibility on any background."""
+    sh = font.render(text, True, shadow)
+    surf.blit(sh, (pos[0] + 1, pos[1] + 1))
+    t = font.render(text, True, color)
+    surf.blit(t, pos)
 
 
 def draw_button(surf, text, rect, fonts, state="normal"):
@@ -895,9 +905,10 @@ class SplendorApp:
     def _draw_title(self):
         s = self.screen
         g = self.game
-        info = self.fonts["normal"].render(
-            f"Round {g.round_number}  ·  {g.current_player.name}'s turn", True, DIM_C)
-        s.blit(info, info.get_rect(midright=(MID_X - 8, 16)))
+        txt = f"Round {g.round_number}  ·  {g.current_player.name}'s turn"
+        info = self.fonts["normal"].render(txt, True, TEXT_C)
+        pos = info.get_rect(midright=(MID_X - 8, 16))
+        shadowed_text(s, txt, (pos.x, pos.y), self.fonts["normal"], TEXT_C)
 
     # ── Nobles ───────────────────────────────────────────────────────────────
 
@@ -906,8 +917,7 @@ class SplendorApp:
         g  = self.game
         pending = (g.get_pending_nobles()
                    if g.get_pending_state() == PENDING_CHOOSE_NOBLE else [])
-        lbl = self.fonts["bold"].render("Nobles", True, DIM_C)
-        s.blit(lbl, (NOBLE_X, NOBLE_Y - 20))
+        shadowed_text(s, "Nobles", (NOBLE_X, NOBLE_Y - 20), self.fonts["bold"], TEXT_C)
         for i, noble in enumerate(g.board.nobles):
             idx = getattr(noble, "_asset_index", i)
             noble_img = self.assets.get(f"noble_{idx}")
@@ -953,8 +963,9 @@ class SplendorApp:
         pygame.draw.line(s, DIVIDER, (MID_X + MID_W + 2, 0),
                          (MID_X + MID_W + 2, SH - STATUS_Y), 1)
 
-        lbl = self.fonts["bold"].render("Token Bank", True, DIM_C)
-        s.blit(lbl, lbl.get_rect(center=(MID_CX, TOK_Y0 - TOKEN_R - 14)))
+        lbl_surf = self.fonts["bold"].render("Token Bank", True, TEXT_C)
+        lbl_pos  = lbl_surf.get_rect(center=(MID_CX, TOK_Y0 - TOKEN_R - 14))
+        shadowed_text(s, "Token Bank", (lbl_pos.x, lbl_pos.y), self.fonts["bold"], TEXT_C)
 
         for i, color in enumerate(all_c):
             cx, cy = tok_center(i)
@@ -977,10 +988,11 @@ class SplendorApp:
                 if color == "gold" and not tok_img:
                     draw_star(s, cx, cy - TOKEN_R + 9, 5, 2, (50, 34, 0))
 
-            side = "WILD" if color == "gold" else color[:3].upper()
-            name = self.fonts["small"].render(side, True,
-                                              HILITE if color == "gold" else DIM_C)
-            s.blit(name, name.get_rect(center=(cx + TOKEN_R + 18, cy)))
+            side     = "WILD" if color == "gold" else color[:3].upper()
+            side_col = HILITE if color == "gold" else TEXT_C
+            name_s   = self.fonts["small"].render(side, True, side_col)
+            name_pos = name_s.get_rect(center=(cx + TOKEN_R + 18, cy))
+            shadowed_text(s, side, (name_pos.x, name_pos.y), self.fonts["small"], side_col)
 
         # Buttons
         labels   = ["Take Tokens", "Buy Card", "Reserve Card", "Buy Reserved"]
@@ -1138,12 +1150,13 @@ class SplendorApp:
         g  = self.game
         gp = g.get_pending_state()
 
+        pygame.draw.rect(s, (16, 12, 8), (0, STATUS_Y - 6, SW, SH - STATUS_Y + 6))
         pygame.draw.line(s, DIVIDER, (0, STATUS_Y - 6), (SW, STATUS_Y - 6), 1)
         msg = self.status
         if gp == PENDING_RETURN_TOKENS:
-            msg = "⚠  Over 10 tokens — click a token in YOUR panel to return one."
+            msg = "Over 10 tokens — click a token in YOUR panel to return one."
         elif gp == PENDING_CHOOSE_NOBLE:
-            msg = "✦  Multiple nobles qualify — click a noble tile to accept one."
+            msg = "Multiple nobles qualify — click a noble tile to accept one."
 
         t = self.fonts["normal"].render(msg, True, TEXT_C)
         s.blit(t, (12, STATUS_Y + 10))
