@@ -19,7 +19,7 @@ from game_component.game import IDLE, PENDING_RETURN_TOKENS, PENDING_CHOOSE_NOBL
 from bot import bot_make_move
 from data_logger import DataLogger
 from bot_sim import run_simulations
-from stats_view import draw_stats_screen
+from stats_view import draw_stats_screen, get_stats_nav_rects, get_stats_page_count
 
 # ── Image assets (optional — place files in assets/ to enable) ────────────────
 # Expected files:
@@ -483,6 +483,7 @@ class SplendorApp:
         self._sim_running  = False
         self._sim_progress = (0, 0)
         self._game_logged  = False   # prevents double-logging per match
+        self._stats_page   = 0
 
         self.fonts = {
             "title":  pygame.font.SysFont("segoeui", 38, bold=True),
@@ -617,6 +618,7 @@ class SplendorApp:
                 if name == "play":
                     self._new_game()
                 elif name == "stats":
+                    self._stats_page = 0
                     self.mode = UM.STATS
                 elif name == "sim":
                     self._start_sim(100)
@@ -633,8 +635,14 @@ class SplendorApp:
     def _click_stats(self, mx, my):
         back = (14, SH - 42, 160, 34)
         sim  = (SW - 214, SH - 42, 200, 34)
+        total_pages = get_stats_page_count(SH)
+        nav = get_stats_nav_rects(SW, SH, total_pages)
         if in_rect(mx, my, back):
             self.mode = UM.START
+        elif nav and in_rect(mx, my, nav["prev"]) and self._stats_page > 0:
+            self._stats_page -= 1
+        elif nav and in_rect(mx, my, nav["next"]) and self._stats_page < total_pages - 1:
+            self._stats_page += 1
         elif in_rect(mx, my, sim) and not self._sim_running:
             self._start_sim(100)
 
@@ -1010,9 +1018,11 @@ class SplendorApp:
     def _draw_stats(self):
         s  = self.screen
         mx, my = pygame.mouse.get_pos()
+        total_pages = get_stats_page_count(SH)
+        self._stats_page = max(0, min(self._stats_page, total_pages - 1))
 
         draw_stats_screen(s, self._stats_rows, self.fonts, SW, SH,
-                          self._sim_running, self._sim_progress)
+                          self._sim_running, self._sim_progress, self._stats_page)
 
         # Back button
         back_r = (14, SH - 42, 160, 34)
@@ -1280,16 +1290,13 @@ class SplendorApp:
         g  = self.game
         gp = g.get_pending_state()
 
-        pygame.draw.rect(s, (16, 12, 8), (0, STATUS_Y - 6, SW, SH - STATUS_Y + 6))
-        pygame.draw.line(s, DIVIDER, (0, STATUS_Y - 6), (SW, STATUS_Y - 6), 1)
         msg = self.status
         if gp == PENDING_RETURN_TOKENS:
             msg = "Over 10 tokens — click a token in YOUR panel to return one."
         elif gp == PENDING_CHOOSE_NOBLE:
             msg = "Multiple nobles qualify — click a noble tile to accept one."
 
-        t = self.fonts["normal"].render(msg, True, TEXT_C)
-        s.blit(t, (12, STATUS_Y + 10))
+        shadowed_text(s, msg, (12, STATUS_Y + 10), self.fonts["normal"], TEXT_C)
 
     # ── Animations ───────────────────────────────────────────────────────────
 
