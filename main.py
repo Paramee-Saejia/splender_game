@@ -534,9 +534,13 @@ class SplendorApp:
         def worker():
             def on_prog(done, total):
                 self._sim_progress = (done, total)
-            run_simulations(n, self._logger, on_progress=on_prog)
-            self._stats_rows  = self._logger.load_all()
-            self._sim_running = False
+            try:
+                run_simulations(n, self._logger, on_progress=on_prog)
+                self._stats_rows = self._logger.load_all()
+            except Exception:
+                traceback.print_exc()
+            finally:
+                self._sim_running = False
 
         threading.Thread(target=worker, daemon=True).start()
 
