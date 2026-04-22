@@ -451,13 +451,10 @@ def draw_noble(surf, noble, rect, fonts, hl=False, noble_img=None):
         surf.blit(sh, (x + 5 + dx, y + 5 + dy))
     pt = fonts["bold"].render(str(noble.points), True, (255, 255, 255))
     surf.blit(pt, (x + 5, y + 5))
-    cy2 = y + 26
+    cy2 = y + 24
     for color, amt in noble.requirement.items():
-        pygame.draw.circle(surf, GEM[color],      (x + 13, cy2 + 6), 8)
-        pygame.draw.circle(surf, GEM_DARK[color], (x + 13, cy2 + 6), 8, 1)
-        n = fonts["small"].render(str(amt), True, (24, 24, 24))
-        surf.blit(n, (x + 25, cy2))
-        cy2 += 20
+        draw_cost_badge(surf, color, amt, x + 7, cy2, fonts, radius=8)
+        cy2 += 19
 
 
 def shadowed_text(surf, text, pos, font, color=TEXT_C, shadow=(0, 0, 0)):
@@ -1020,8 +1017,13 @@ class SplendorApp:
 
         desc = self.fonts["small"].render(
             "Collect gems  ·  Buy cards  ·  Attract nobles  ·  Reach 15 prestige points",
-            True, DIM_C)
-        s.blit(desc, desc.get_rect(center=(cx, SH // 2 - 58)))
+            True, TEXT_C)
+        desc_r = desc.get_rect(center=(cx, SH // 2 - 58))
+        desc_bg = pygame.Surface((desc_r.width + 26, desc_r.height + 10), pygame.SRCALPHA)
+        pygame.draw.rect(desc_bg, (0, 0, 0, 150), desc_bg.get_rect(), border_radius=8)
+        pygame.draw.rect(desc_bg, (96, 76, 36, 185), desc_bg.get_rect(), 1, border_radius=8)
+        s.blit(desc_bg, desc_bg.get_rect(center=desc_r.center))
+        s.blit(desc, desc_r)
 
         # Separator line
         pygame.draw.line(s, (80, 64, 40), (cx - 160, SH // 2 - 36), (cx + 160, SH // 2 - 36), 1)
@@ -1047,7 +1049,12 @@ class SplendorApp:
         n_matches = len(self._stats_rows)
         hint = self.fonts["small"].render(
             f"{n_matches} matches recorded  ·  2-player  ·  4 gems  ·  15 pts to win", True, DIM_C)
-        s.blit(hint, hint.get_rect(center=(cx, SH // 2 + 178)))
+        hint_r = hint.get_rect(center=(cx, SH // 2 + 178))
+        hint_bg = pygame.Surface((hint_r.width + 24, hint_r.height + 10), pygame.SRCALPHA)
+        pygame.draw.rect(hint_bg, (0, 0, 0, 145), hint_bg.get_rect(), border_radius=8)
+        pygame.draw.rect(hint_bg, (96, 76, 36, 170), hint_bg.get_rect(), 1, border_radius=8)
+        s.blit(hint_bg, hint_bg.get_rect(center=hint_r.center))
+        s.blit(hint, hint_r)
 
     def _draw_stats(self):
         s  = self.screen
@@ -1294,9 +1301,12 @@ class SplendorApp:
                                (rx + RCARD_W - 10, res_y + 9), 7)
             pygame.draw.circle(s, strip_col, (rx + RCARD_W - 10, res_y + 9), 5)
             if card.points > 0:
+                for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                    sh = self.fonts["bold"].render(str(card.points), True, (0, 0, 0))
+                    s.blit(sh, (rx + 5 + dx, res_y + 2 + dy))
                 p = self.fonts["bold"].render(str(card.points), True, TEXT_C)
-                s.blit(p, (rx + 4, res_y + 20))
-            cy2 = res_y + 34
+                s.blit(p, (rx + 5, res_y + 2))
+            cy2 = res_y + 24
             for color in COLOR_ORDER:
                 a2 = card.cost.get(color, 0)
                 if not a2: continue
