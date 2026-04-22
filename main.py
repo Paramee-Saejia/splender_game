@@ -53,12 +53,14 @@ def _load_assets():
             os.path.join(base, f"token_{color}.png"), (52, 52))
     # Per-card images (card_L{level}_{color}_{index}.png); fall back to card_bg_L{level}.png
     for lv, count in _CARD_COUNTS.items():
+        card_dir = os.path.join(base, "cards", f"L{lv}")
         assets[f"card_bg_L{lv}"] = _load_img(
-            os.path.join(base, f"card_bg_L{lv}.png"), (148, 152))
+            os.path.join(card_dir, "bg.png"), (148, 152))
         for color in _GEM_COLORS:
             for i in range(count):
                 key = f"card_L{lv}_{color}_{i}"
-                assets[key] = _load_img(os.path.join(base, f"{key}.png"), (148, 152))
+                assets[key] = _load_img(
+                    os.path.join(card_dir, f"{color}_{i}.png"), (148, 152))
     for i in range(10):
         assets[f"noble_{i}"] = _load_img(
             os.path.join(base, f"noble_{i}.png"), (118, 122))
