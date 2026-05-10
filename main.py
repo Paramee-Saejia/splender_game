@@ -121,11 +121,24 @@ BTN_DY   = BTN_H + 8
 BTN_Y0   = 510                       # top of first action button
 
 # Col C – player panels
-PANEL_X  = 992
-PANEL_W  = SW - PANEL_X - 6
+PANEL_X  = 982
+PANEL_W  = SW - PANEL_X - 4
 PANEL_H  = 290
 HUMAN_Y  = 8
 BOT_Y    = 310
+
+PANEL_PAD_X          = 8
+PANEL_TOKEN_Y        = 44
+PANEL_TOKEN_STEP     = 42
+PANEL_BONUS_Y        = 70
+PANEL_BONUS_X        = 48
+PANEL_BONUS_STEP     = 36
+PANEL_DIVIDER_Y      = 88
+PANEL_RESERVED_Y     = 108
+PANEL_RESERVED_LABEL_Y = 93
+PANEL_RESERVED_W     = 84
+PANEL_RESERVED_H     = 112
+PANEL_RESERVED_GAP   = 6
 
 STATUS_Y = SH - 40
 
@@ -282,6 +295,16 @@ def btn_rect(row):
     return (BTN_X, BTN_Y0 + row * BTN_DY, BTN_W, BTN_H)
 
 
+def panel_token_center(panel_x, panel_y, idx):
+    return (panel_x + PANEL_PAD_X + 12 + idx * PANEL_TOKEN_STEP,
+            panel_y + PANEL_TOKEN_Y)
+
+
+def panel_reserved_rect(panel_x, panel_y, slot):
+    rx = panel_x + PANEL_PAD_X + slot * (PANEL_RESERVED_W + PANEL_RESERVED_GAP)
+    return (rx, panel_y + PANEL_RESERVED_Y, PANEL_RESERVED_W, PANEL_RESERVED_H)
+
+
 def in_game_menu_rect():
     return (SW - 174, SH - 42, 160, 34)
 
@@ -392,11 +415,7 @@ def draw_card(surf, card, rect, fonts, hl=False, green=False, assets=None):
     border = GEM.get(card.color_bonus, (110, 110, 110))
 
     rnd(surf, bg, rect, r=7)
-    card_img = None
-    if assets:
-        idx = getattr(card, "_image_index", 0)
-        card_img = (assets.get(f"card_L{card.level}_{card.color_bonus}_{idx}")
-                    or assets.get(f"card_bg_L{card.level}"))
+    card_img = get_card_image(assets, card, (w, h))
     if card_img:
         tmp = pygame.Surface((w, h), pygame.SRCALPHA)
         tmp.blit(card_img, (0, 0))
@@ -435,6 +454,71 @@ def draw_card(surf, card, rect, fonts, hl=False, green=False, assets=None):
             continue
         draw_cost_badge(surf, color, amt, x + 5, cy2, fonts, radius=8)
         cy2 += 19
+
+
+def get_card_image(assets, card, size):
+    if not assets:
+        return None
+    idx = getattr(card, "_image_index", 0)
+    key = f"card_L{card.level}_{card.color_bonus}_{idx}"
+    fallback_key = f"card_bg_L{card.level}"
+    source = assets.get(key) or assets.get(fallback_key)
+    if source is None:
+        return None
+    if source.get_size() == size:
+        return source
+    cache = assets.setdefault("_scaled_card_cache", {})
+    cache_key = ((key if assets.get(key) else fallback_key), size)
+    scaled = cache.get(cache_key)
+    if scaled is None:
+        scaled = pygame.transform.smoothscale(source, size)
+        cache[cache_key] = scaled
+    return scaled
+
+
+def draw_reserved_card(surf, card, rect, fonts, assets=None, hl=False, green=False):
+    x, y, w, h = rect
+    bg = card_bg(card.level, card.color_bonus)
+    border = GEM.get(card.color_bonus, (110, 110, 110))
+
+    rnd(surf, bg, rect, r=6)
+    card_img = get_card_image(assets, card, (w, h))
+    if card_img:
+        tmp = pygame.Surface((w, h), pygame.SRCALPHA)
+        tmp.blit(card_img, (0, 0))
+        mask = pygame.Surface((w, h), pygame.SRCALPHA)
+        pygame.draw.rect(mask, (255, 255, 255, 255), (0, 0, w, h), border_radius=6)
+        tmp.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        surf.blit(tmp, (x, y))
+    if hl:
+        pygame.draw.rect(surf, HILITE, rect, 3, border_radius=6)
+    elif green:
+        pygame.draw.rect(surf, AFFORD_G, rect, 2, border_radius=6)
+    else:
+        pygame.draw.rect(surf, border, rect, 2, border_radius=6)
+
+    strip_h = 18
+    rnd(surf, border, (x, y, w, strip_h), r=6)
+    gem_col = GEM.get(card.color_bonus, border)
+    pygame.draw.circle(surf, GEM_DARK.get(card.color_bonus, border), (x + w - 10, y + 9), 7)
+    pygame.draw.circle(surf, gem_col, (x + w - 10, y + 9), 5)
+    hl2 = tuple(min(255, v + 60) for v in gem_col)
+    pygame.draw.circle(surf, hl2, (x + w - 12, y + 7), 2)
+
+    if card.points > 0:
+        for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            sh = fonts["bold"].render(str(card.points), True, (0, 0, 0))
+            surf.blit(sh, (x + 4 + dx, y + 2 + dy))
+        pt = fonts["bold"].render(str(card.points), True, (255, 255, 255))
+        surf.blit(pt, (x + 4, y + 2))
+
+    cy2 = y + 23
+    for color in COLOR_ORDER:
+        amt = card.cost.get(color, 0)
+        if not amt:
+            continue
+        draw_cost_badge(surf, color, amt, x + 4, cy2, fonts, radius=6)
+        cy2 += 15
 
 
 def draw_hidden(surf, deck, rect, fonts, hovering=False):
@@ -819,7 +903,7 @@ class SplendorApp:
             if color in all_c:
                 i  = all_c.index(color)
                 cx, cy = tok_center(i)
-                dst = (PANEL_X + 18 + len(self.fly_toks) * 28, HUMAN_Y + 72)
+                dst = panel_token_center(PANEL_X, HUMAN_Y, len(self.fly_toks) % len(all_c))
                 self.fly_toks.append(FlyToken(color, (cx, cy), dst))
 
     # ── Buy face-up card ──────────────────────────────────────────────────────
@@ -893,8 +977,7 @@ class SplendorApp:
                 return
 
     def _res_rect(self, slot):
-        res_y = HUMAN_Y + 108
-        return (PANEL_X + 6 + slot * 85, res_y, 80, 108)
+        return panel_reserved_rect(PANEL_X, HUMAN_Y, slot)
 
     # ── Pending – return token ────────────────────────────────────────────────
 
@@ -902,7 +985,7 @@ class SplendorApp:
         player = self.game.current_player
         all_c  = COLOR_ORDER + ["gold"]
         for i, color in enumerate(all_c):
-            cx, cy = PANEL_X + 14 + i * 56 + 14, HUMAN_Y + 68
+            cx, cy = panel_token_center(PANEL_X, HUMAN_Y, i)
             if in_circ(mx, my, cx, cy, 18) and player.tokens.get(color, 0) > 0:
                 ok = self.game.resolve_return_token(color)
                 if ok:
@@ -1197,8 +1280,8 @@ class SplendorApp:
 
         # Separator line
         pygame.draw.line(s, DIVIDER, (MID_X - 2, 0), (MID_X - 2, SH - STATUS_Y), 1)
-        pygame.draw.line(s, DIVIDER, (MID_X + MID_W + 2, 0),
-                         (MID_X + MID_W + 2, SH - STATUS_Y), 1)
+        pygame.draw.line(s, DIVIDER, (PANEL_X - 2, 0),
+                         (PANEL_X - 2, SH - STATUS_Y), 1)
 
         lbl_surf = self.fonts["bold"].render("Token Bank", True, TEXT_C)
         lbl_pos  = lbl_surf.get_rect(center=(MID_CX, TOK_Y0 - TOKEN_R - 14))
@@ -1292,10 +1375,10 @@ class SplendorApp:
         all_c  = COLOR_ORDER + ["gold"]
         pend_r = (self.mode == UM.PEND_RETURN and is_human)
         mx2, my2 = pygame.mouse.get_pos()
-        tok_y  = py + 44   # pushed down so circles don't overlap the name text
+        tok_y  = py + PANEL_TOKEN_Y
         for i, color in enumerate(all_c):
             amt   = player.tokens.get(color, 0)
-            cx    = px + 14 + i * 40
+            cx, _ = panel_token_center(px, py, i)
             hover = pend_r and in_circ(mx2, my2, cx, tok_y, 14) and amt > 0
             if hover:
                 pygame.draw.circle(s, HILITE, (cx, tok_y), 16)
@@ -1314,10 +1397,10 @@ class SplendorApp:
 
         # ── Row 2: Bonus (cards owned per colour) ────────────────────────────
         bonus = player.get_bonus_count()
-        bon_y = py + 70
+        bon_y = py + PANEL_BONUS_Y
         bl = self.fonts["small"].render("Bonus:", True, DIM_C)
-        s.blit(bl, (px + 8, bon_y))
-        bx = px + 52
+        s.blit(bl, (px + PANEL_PAD_X, bon_y))
+        bx = px + PANEL_BONUS_X
         for color in COLOR_ORDER:
             amt = bonus[color]
             col = GEM[color] if amt > 0 else tuple(max(0, v - 60) for v in GEM[color])
@@ -1326,54 +1409,29 @@ class SplendorApp:
             n = self.fonts["small"].render(str(amt), True,
                                            TEXT_C if amt > 0 else DIM_C)
             s.blit(n, (bx + 14, bon_y))
-            bx += 38
+            bx += PANEL_BONUS_STEP
 
         # ── Divider ──────────────────────────────────────────────────────────
-        pygame.draw.line(s, DIVIDER, (px + 6, py + 88), (px + pw - 6, py + 88), 1)
+        pygame.draw.line(s, DIVIDER, (px + 6, py + PANEL_DIVIDER_Y),
+                         (px + pw - 6, py + PANEL_DIVIDER_Y), 1)
 
         # ── Row 3: Reserved cards ─────────────────────────────────────────────
-        res_label_y = py + 93
-        res_y       = py + 108
+        res_label_y = py + PANEL_RESERVED_LABEL_Y
         rl = self.fonts["small"].render("Reserved:", True, DIM_C)
-        s.blit(rl, (px + 8, res_label_y))
+        s.blit(rl, (px + PANEL_PAD_X, res_label_y))
 
-        RCARD_W, RCARD_H = 80, 108
         for i, card in enumerate(player.reserved_cards):
-            rx  = px + 6 + i * (RCARD_W + 5)
-            r   = (rx, res_y, RCARD_W, RCARD_H)
-            if is_human:
-                # keep _res_rect aligned for click detection
-                pass
+            r   = panel_reserved_rect(px, py, i)
             hl  = (self.mode == UM.BUY_RES and is_human and in_rect(mx2, my2, r))
             can = player.can_afford(card)
-            rnd(s, card_bg(card.level, card.color_bonus), r, r=5)
-            border_col = GEM.get(card.color_bonus, border_col := (100,100,100))
-            bc = HILITE if hl else (AFFORD_G if can and is_human else border_col)
-            pygame.draw.rect(s, bc, r, 2, border_radius=5)
-            # Bonus gem in top strip
-            strip_col = GEM.get(card.color_bonus, (110, 110, 110))
-            rnd(s, strip_col, (rx, res_y, RCARD_W, 18), r=5)
-            pygame.draw.circle(s, GEM_DARK.get(card.color_bonus, strip_col),
-                               (rx + RCARD_W - 10, res_y + 9), 7)
-            pygame.draw.circle(s, strip_col, (rx + RCARD_W - 10, res_y + 9), 5)
-            if card.points > 0:
-                for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-                    sh = self.fonts["bold"].render(str(card.points), True, (0, 0, 0))
-                    s.blit(sh, (rx + 5 + dx, res_y + 2 + dy))
-                p = self.fonts["bold"].render(str(card.points), True, TEXT_C)
-                s.blit(p, (rx + 5, res_y + 2))
-            cy2 = res_y + 24
-            for color in COLOR_ORDER:
-                a2 = card.cost.get(color, 0)
-                if not a2: continue
-                draw_cost_badge(s, color, a2, rx + 4, cy2, self.fonts, radius=6)
-                cy2 += 15
+            draw_reserved_card(s, card, r, self.fonts, assets=self.assets,
+                               hl=hl, green=(can and is_human))
 
         # ── Row 4: Nobles earned ──────────────────────────────────────────────
-        nob_y = res_y + RCARD_H + 6
+        nob_y = py + PANEL_RESERVED_Y + PANEL_RESERVED_H + 6
         if player.nobles:
             nb_lbl = self.fonts["small"].render("Nobles:", True, DIM_C)
-            s.blit(nb_lbl, (px + 8, nob_y))
+            s.blit(nb_lbl, (px + PANEL_PAD_X, nob_y))
             for i, n in enumerate(player.nobles):
                 nx2 = px + 60 + i * 36
                 rnd(s, (155, 140, 106), (nx2, nob_y - 2, 32, 22), r=4)
