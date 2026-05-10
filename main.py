@@ -791,6 +791,11 @@ class SplendorApp:
         nav = get_stats_nav_rects(SW, SH, total_pages)
         if in_rect(mx, my, back):
             self.mode = UM.START
+        elif nav and "tabs" in nav:
+            for idx, rect in enumerate(nav["tabs"]):
+                if in_rect(mx, my, rect):
+                    self._stats_page = idx
+                    return
         elif nav and in_rect(mx, my, nav["prev"]) and self._stats_page > 0:
             self._stats_page -= 1
         elif nav and in_rect(mx, my, nav["next"]) and self._stats_page < total_pages - 1:
