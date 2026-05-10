@@ -1,80 +1,71 @@
 """
-stats_view.py - Modern statistics dashboard for Splendor.
+stats_view.py - Statistics dashboard rendered with pygame + matplotlib.
 """
 
 import math
 import pygame
 
+import matplotlib
 
-BG      = (10, 8, 6)
-CARD    = (20, 16, 12)
-CARD2   = (28, 22, 16)
-BORDER  = (48, 38, 24)
-TEXT    = (232, 224, 210)
-DIM     = (115, 104, 84)
-GOLD    = (245, 197, 62)
-TEAL    = (42, 191, 175)
-BLUE    = (70, 150, 230)
-ROSE    = (220, 80, 80)
+matplotlib.use("Agg")
+
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.figure import Figure
+
+
+BG = (10, 8, 6)
+CARD = (20, 16, 12)
+CARD2 = (28, 22, 16)
+BORDER = (48, 38, 24)
+TEXT = (232, 224, 210)
+DIM = (115, 104, 84)
+GOLD = (245, 197, 62)
+TEAL = (42, 191, 175)
+BLUE = (70, 150, 230)
+ROSE = (220, 80, 80)
 GREEN_A = (72, 200, 110)
 
 GEM = {
     "white": (215, 210, 195),
-    "blue":  (58, 130, 200),
+    "blue": (58, 130, 200),
     "green": (42, 168, 70),
-    "red":   (210, 52, 52),
+    "red": (210, 52, 52),
     "black": (80, 80, 80),
 }
 GEM_BRIGHT = {
     "white": (255, 252, 240),
-    "blue":  (100, 170, 255),
+    "blue": (100, 170, 255),
     "green": (80, 220, 110),
-    "red":   (255, 100, 100),
+    "red": (255, 100, 100),
     "black": (130, 130, 130),
 }
-TIER_COL  = {1: (72, 165, 72), 2: (185, 122, 46), 3: (168, 58, 58)}
-TIER_GLOW = {1: (120, 220, 100), 2: (230, 165, 80), 3: (220, 90, 90)}
-P1_COL    = (70, 148, 228)
-P2_COL    = (228, 118, 50)
+TIER_COL = {1: (72, 165, 72), 2: (185, 122, 46), 3: (168, 58, 58)}
+P1_COL = (228, 170, 62)
+P2_COL = (78, 168, 132)
+BOX_COL = (126, 110, 194)
+BOX_EDGE = (164, 147, 228)
+HIST_COL = (70, 148, 228)
+
+MPL_BG = tuple(c / 255 for c in BG)
+MPL_CARD = tuple(c / 255 for c in CARD)
+MPL_BORDER = tuple(c / 255 for c in BORDER)
+MPL_TEXT = tuple(c / 255 for c in TEXT)
+MPL_DIM = tuple(c / 255 for c in DIM)
+MPL_GOLD = tuple(c / 255 for c in GOLD)
+MPL_TEAL = tuple(c / 255 for c in TEAL)
+MPL_BLUE = tuple(c / 255 for c in BLUE)
+MPL_ROSE = tuple(c / 255 for c in ROSE)
+MPL_BOX = tuple(c / 255 for c in BOX_COL)
+MPL_BOX_EDGE = tuple(c / 255 for c in BOX_EDGE)
+MPL_HIST = tuple(c / 255 for c in HIST_COL)
+
+_FIGURE_CACHE = {}
 
 
 def _rnd(surf, col, rect, r=8, bw=0, bc=None):
     pygame.draw.rect(surf, col, rect, border_radius=r)
     if bw:
         pygame.draw.rect(surf, bc or col, rect, bw, border_radius=r)
-
-
-def _gradient_bar(surf, rect, top_c, bot_c, r=5):
-    x, y, w, h = rect
-    if w <= 0 or h <= 0:
-        return
-    tmp = pygame.Surface((w, h), pygame.SRCALPHA)
-    for i in range(h):
-        t = i / max(h - 1, 1)
-        c = tuple(int(top_c[j] * (1 - t) + bot_c[j] * t) for j in range(3))
-        pygame.draw.line(tmp, c, (0, i), (w, i))
-    mask = pygame.Surface((w, h), pygame.SRCALPHA)
-    pygame.draw.rect(mask, (255, 255, 255, 255), (0, 0, w, h), border_radius=r)
-    tmp.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
-    surf.blit(tmp, (x, y))
-
-
-def _glow_circle(surf, cx, cy, r, col, strength=60):
-    for i in range(3, 0, -1):
-        alpha = strength // i
-        s = pygame.Surface((r * 2 * i, r * 2 * i), pygame.SRCALPHA)
-        pygame.draw.circle(s, (*col, alpha), (r * i, r * i), r * i)
-        surf.blit(s, (cx - r * i, cy - r * i))
-
-
-def _panel(surf, rect, title, accent, fonts):
-    _rnd(surf, CARD, rect, r=10)
-    _rnd(surf, CARD, rect, r=10, bw=1, bc=BORDER)
-    pygame.draw.rect(surf, accent, (rect[0] + 1, rect[1] + 1, rect[2] - 2, 3),
-                     border_radius=10)
-    sh = fonts["bold"].render(title, True, (0, 0, 0))
-    surf.blit(sh, (rect[0] + 13, rect[1] + 12))
-    surf.blit(fonts["bold"].render(title, True, TEXT), (rect[0] + 12, rect[1] + 11))
 
 
 def _stat_pill(surf, x, y, label, value, col, fonts):
@@ -100,318 +91,230 @@ def _i(row, key):
         return 0
 
 
-def _grid_h(surf, ax, ay, aw, ah, max_v, ticks, font):
-    for pct in ticks:
-        ty = ay + ah - int(ah * pct / 100)
-        col = (38, 30, 20) if pct != 0 else BORDER
-        pygame.draw.line(surf, col, (ax, ty), (ax + aw, ty), 1)
-        v = font.render(str(int(max_v * pct / 100)), True, DIM)
-        surf.blit(v, (ax - v.get_width() - 5, ty - 6))
+def _rows_signature(rows):
+    return (
+        len(rows),
+        sum(_i(r, "total_turns") for r in rows),
+        sum(_i(r, "score_margin") for r in rows),
+        sum(_i(r, "p1_gold_spent") + _i(r, "p2_gold_spent") for r in rows),
+        sum(_i(r, "p1_tier1") + _i(r, "p2_tier1") for r in rows),
+        sum(_i(r, "p1_tier2") + _i(r, "p2_tier2") for r in rows),
+        sum(_i(r, "p1_tier3") + _i(r, "p2_tier3") for r in rows),
+    )
 
 
-def draw_gem_chart(surf, rows, rect, fonts):
-    x, y, w, h = rect
-    _panel(surf, rect, "Gem Color Collection", TEAL, fonts)
-    if not rows:
-        _no_data(surf, rect, fonts)
-        return
+def _mpl_color(rgb):
+    return tuple(c / 255 for c in rgb)
 
+
+def _style_axes(ax, title, accent):
+    ax.set_facecolor(MPL_CARD)
+    for spine in ax.spines.values():
+        spine.set_color(MPL_BORDER)
+        spine.set_linewidth(1.0)
+    ax.set_axisbelow(True)
+    ax.tick_params(colors=MPL_DIM, labelsize=9, pad=4)
+    ax.grid(True, axis="y", color=MPL_BORDER, alpha=0.45, linewidth=0.8)
+    ax.set_title("")
+    ax.plot([0, 1], [0.985, 0.985], transform=ax.transAxes, color=accent, linewidth=2, clip_on=False)
+    ax.text(
+        0.012, 0.945, title,
+        transform=ax.transAxes,
+        ha="left",
+        va="bottom",
+        color=MPL_TEXT,
+        fontsize=10,
+        fontweight="bold",
+        bbox=dict(facecolor=MPL_CARD, edgecolor="none", pad=0.4),
+        zorder=5,
+    )
+
+
+def _plot_gem_chart(ax, rows):
+    _style_axes(ax, "Gem Color Collection", MPL_TEAL)
     colors = ["white", "blue", "green", "red", "black"]
-    p1 = {c: sum(_i(r, f"p1_gem_{c}") for r in rows) for c in colors}
-    p2 = {c: sum(_i(r, f"p2_gem_{c}") for r in rows) for c in colors}
-    totals = {c: p1[c] + p2[c] for c in colors}
-    max_v = max(totals.values()) or 1
+    labels = ["WHI", "BLU", "GRE", "RED", "BLA"]
+    p1 = [sum(_i(r, f"p1_gem_{c}") for r in rows) for c in colors]
+    p2 = [sum(_i(r, f"p2_gem_{c}") for r in rows) for c in colors]
+    totals = [a + b for a, b in zip(p1, p2)]
+    x = list(range(len(colors)))
 
-    ax, ay = x + 42, y + 36
-    aw, ah = w - 54, h - 86
-    bw = aw // 8
-    gap = (aw - bw * 5) // 6
-
-    _grid_h(surf, ax, ay, aw, ah, max_v, [0, 25, 50, 75, 100], fonts["small"])
-
-    for i, c in enumerate(colors):
-        bx = ax + i * (bw + gap) + gap
-        tot = totals[c]
-        bh = int(ah * tot / max_v)
-        by = ay + ah - bh
-
-        h2 = int(bh * p2[c] / max(tot, 1))
-        h1 = bh - h2
-        if h2 > 0:
-            _gradient_bar(surf, (bx, ay + ah - h2, bw, h2),
-                          GEM_BRIGHT[c], GEM[c], r=4 if h1 == 0 else 2)
-        if h1 > 0:
-            _gradient_bar(surf, (bx, by, bw, h1),
-                          tuple(min(255, v + 40) for v in GEM_BRIGHT[c]),
-                          GEM_BRIGHT[c], r=4)
-
-        if tot > 0:
-            _glow_circle(surf, bx + bw // 2, by, 6, GEM_BRIGHT[c], 50)
-            lbl = fonts["small"].render(str(tot), True, TEXT)
-            surf.blit(lbl, lbl.get_rect(center=(bx + bw // 2, by - 13)))
-
-        pygame.draw.circle(surf, GEM[c], (bx + bw // 2, ay + ah + 12), 5)
-        nl = fonts["small"].render(c[:3].upper(), True, TEXT)
-        surf.blit(nl, nl.get_rect(center=(bx + bw // 2, ay + ah + 26)))
-
-    total_all = sum(totals.values())
-    px = x + 12
-    for lbl, val, col in [("Total", total_all, TEAL), ("Matches", len(rows), GOLD)]:
-        pw = _stat_pill(surf, px, y + h - 44, lbl, val, col, fonts)
-        px += pw + 8
+    ax.bar(x, p1, color=[_mpl_color(GEM_BRIGHT[c]) for c in colors], width=0.66, label="Bot A", edgecolor="none")
+    ax.bar(x, p2, bottom=p1, color=[_mpl_color(GEM[c]) for c in colors], width=0.66, label="Bot B", edgecolor="none")
+    ax.set_xticks(x, labels)
+    ax.margins(x=0.05)
+    ymax = max(totals) if totals else 1
+    ax.set_ylim(0, ymax * 1.28 if ymax > 0 else 1)
+    for i, total in enumerate(totals):
+        ax.text(i, total + ymax * 0.05, str(total), ha="center", va="bottom", color=MPL_TEXT, fontsize=9)
+    ax.legend(loc="upper right", frameon=False, labelcolor=MPL_TEXT, fontsize=8)
 
 
-def draw_tier_chart(surf, rows, rect, fonts):
-    x, y, w, h = rect
-    _panel(surf, rect, "Card Tier Purchases", GOLD, fonts)
-    if not rows:
-        _no_data(surf, rect, fonts)
-        return
-
-    totals = {
-        t: sum(_i(r, f"p1_tier{t}") + _i(r, f"p2_tier{t}") for r in rows)
-        for t in [1, 2, 3]
-    }
-    grand = sum(totals.values()) or 1
-
-    ax, ay = x + 16, y + 42
-    aw, ah = w - 32, h - 96
-    row_h = ah // 3 - 6
-
-    for i, tier in enumerate([1, 2, 3]):
-        by = ay + i * (row_h + 16)
-        val = totals[tier]
-        pct = val / grand
-        bar_w = int((aw - 80) * pct)
-
-        _rnd(surf, CARD2, (ax + 60, by, aw - 80, row_h), r=5)
-        if bar_w > 0:
-            _gradient_bar(surf, (ax + 60, by, bar_w, row_h),
-                          TIER_GLOW[tier], TIER_COL[tier], r=5)
-        if bar_w > 8:
-            _glow_circle(surf, ax + 60 + bar_w, by + row_h // 2, 8,
-                         TIER_GLOW[tier], 60)
-
-        tl = fonts["bold"].render(f"Tier {tier}", True, TIER_GLOW[tier])
-        surf.blit(tl, (ax, by + row_h // 2 - tl.get_height() // 2))
-
-        vl = fonts["bold"].render(f"{val}", True, TEXT)
-        surf.blit(vl, (ax + aw - 55, by + row_h // 2 - vl.get_height() // 2))
-        pl = fonts["small"].render(f"{pct * 100:.0f}%", True, DIM)
-        surf.blit(pl, (ax + aw - 32, by + row_h // 2 - pl.get_height() // 2))
-
-    px = x + 12
-    for lbl, val, col in [
-        ("Total Cards", grand, GOLD),
-        ("Per Match", f"{grand / max(len(rows), 1):.1f}", GREEN_A),
-    ]:
-        pw = _stat_pill(surf, px, y + h - 44, lbl, val, col, fonts)
-        px += pw + 8
+def _plot_tier_chart(ax, rows):
+    _style_axes(ax, "Card Tier Purchases", MPL_GOLD)
+    tiers = [1, 2, 3]
+    values = [sum(_i(r, f"p1_tier{t}") + _i(r, f"p2_tier{t}") for r in rows) for t in tiers]
+    labels = [f"Tier {t}" for t in tiers]
+    ypos = [2, 1, 0]
+    cols = [_mpl_color(TIER_COL[t]) for t in tiers]
+    ax.barh(ypos, values, color=cols, height=0.5)
+    ax.set_yticks(ypos, labels)
+    ax.set_xlim(0, max(values) * 1.18 if max(values) > 0 else 1)
+    ax.grid(True, axis="x", color=MPL_BORDER, alpha=0.45, linewidth=0.8)
+    ax.grid(False, axis="y")
+    for y, v in zip(ypos, values):
+        ax.text(v + max(values) * 0.02 if max(values) > 0 else 0.05, y, str(v),
+                va="center", ha="left", color=MPL_TEXT, fontsize=10, fontweight="bold")
 
 
-def draw_boxplot(surf, rows, rect, fonts):
-    x, y, w, h = rect
-    _panel(surf, rect, "Final Score Margin", ROSE, fonts)
-    if not rows:
-        _no_data(surf, rect, fonts)
-        return
-
+def _plot_boxplot(ax, rows):
+    _style_axes(ax, "Final Score Margin", MPL_ROSE)
     values = sorted(_i(r, "score_margin") for r in rows)
-    n = len(values)
-    if n == 0:
-        _no_data(surf, rect, fonts)
+    if not values:
+        ax.text(0.5, 0.5, "No score margin data", ha="center", va="center", color=MPL_DIM, transform=ax.transAxes)
+        ax.set_xticks([])
+        ax.set_yticks([])
         return
-
-    lo = values[0]
-    hi = values[-1]
-    q1 = values[n // 4]
-    med = values[n // 2]
-    q3 = values[3 * n // 4]
-    avg = sum(values) / n
-    span = max(hi - lo, 1)
-
-    ax, ay = x + 14, y + 48
-    aw, ah = w - 28, h - 110
-
-    def px(v):
-        return ax + int(aw * (v - lo) / span)
-
-    cy = ay + ah // 2
-    bh = ah // 3
-
-    iqr_s = pygame.Surface((max(1, px(q3) - px(q1)), bh + 16), pygame.SRCALPHA)
-    iqr_s.fill((60, 100, 180, 40))
-    surf.blit(iqr_s, (px(q1), cy - bh // 2 - 8))
-
-    for pct in [0, 25, 50, 75, 100]:
-        gx = ax + int(aw * pct / 100)
-        pygame.draw.line(surf, (35, 28, 18), (gx, ay), (gx, ay + ah), 1)
-        lv = lo + int(span * pct / 100)
-        t = fonts["small"].render(str(lv), True, DIM)
-        surf.blit(t, t.get_rect(center=(gx, ay + ah + 12)))
-
-    pygame.draw.line(surf, DIM, (px(lo), cy), (px(q1), cy), 2)
-    pygame.draw.line(surf, DIM, (px(q3), cy), (px(hi), cy), 2)
-    for cap_x in (px(lo), px(hi)):
-        pygame.draw.line(surf, DIM, (cap_x, cy - bh // 2), (cap_x, cy + bh // 2), 2)
-
-    box = (px(q1), cy - bh // 2, max(4, px(q3) - px(q1)), bh)
-    _gradient_bar(surf, box, (80, 120, 200), (45, 75, 145), r=5)
-    _rnd(surf, (45, 75, 145), box, r=5, bw=1, bc=(100, 140, 220))
-
-    pygame.draw.line(surf, GOLD, (px(med), cy - bh // 2), (px(med), cy + bh // 2), 3)
-    _glow_circle(surf, int(px(avg)), cy, 6, ROSE, 80)
-    pygame.draw.circle(surf, ROSE, (int(px(avg)), cy), 5)
-    pygame.draw.circle(surf, (255, 150, 150), (int(px(avg)), cy), 3)
-
-    for v, lbl, col in [
-        (lo, "Min", DIM),
-        (q1, "Q1", TEXT),
-        (med, "Med", GOLD),
-        (q3, "Q3", TEXT),
-        (hi, "Max", DIM),
-    ]:
-        t = fonts["small"].render(f"{lbl} {v}", True, col)
-        surf.blit(t, t.get_rect(center=(px(v), ay + 12)))
-
-    px2 = x + 12
-    for lbl, val, col in [("Avg", f"{avg:.1f}", BLUE), ("Median", med, GOLD), ("n", n, DIM)]:
-        pw = _stat_pill(surf, px2, y + h - 44, lbl, val, col, fonts)
-        px2 += pw + 8
+    bp = ax.boxplot(
+        values,
+        vert=False,
+        patch_artist=True,
+        widths=0.46,
+        boxprops=dict(facecolor=MPL_BOX, edgecolor=MPL_BOX_EDGE, linewidth=1.2),
+        medianprops=dict(color=MPL_GOLD, linewidth=2.2),
+        whiskerprops=dict(color=MPL_DIM, linewidth=1.3),
+        capprops=dict(color=MPL_DIM, linewidth=1.3),
+        flierprops=dict(marker="o", markersize=3, markerfacecolor=MPL_ROSE, markeredgecolor=MPL_ROSE, alpha=0.8),
+    )
+    avg = sum(values) / len(values)
+    ax.scatter([avg], [1], color=MPL_ROSE, s=55, zorder=3, label=f"Avg {avg:.1f}")
+    ax.legend(loc="upper right", frameon=False, labelcolor=MPL_TEXT, fontsize=8)
+    ax.set_yticks([])
+    ax.grid(True, axis="x", color=MPL_BORDER, alpha=0.45, linewidth=0.8)
 
 
-def draw_pie_chart(surf, rows, rect, fonts):
-    x, y, w, h = rect
-    _panel(surf, rect, "Gold Token Usage", GOLD, fonts)
-    if not rows:
-        _no_data(surf, rect, fonts)
-        return
-
+def _plot_pie(ax, rows):
+    _style_axes(ax, "Gold Token Usage", MPL_GOLD)
+    ax.grid(False)
     p1g = sum(_i(r, "p1_gold_spent") for r in rows)
     p2g = sum(_i(r, "p2_gold_spent") for r in rows)
-    total = p1g + p2g or 1
-
-    cx = x + w // 2
-    cy = y + h // 2 + 4
-    outer = min(w, h) // 3
-    inner = outer * 55 // 100
-
-    slices = [
-        (p1g, P1_COL, (130, 190, 255), "Bot A"),
-        (p2g, P2_COL, (255, 180, 120), "Bot B"),
-    ]
-    angle = -math.pi / 2
-
-    for val, col, bright, _ in slices:
-        sweep = 2 * math.pi * val / total
-        steps = max(3, int(sweep * 50))
-        pts = [(cx, cy)]
-        for s in range(steps + 1):
-            a = angle + sweep * s / steps
-            pts.append((cx + outer * math.cos(a), cy + outer * math.sin(a)))
-        if len(pts) >= 3:
-            pygame.draw.polygon(surf, col, pts)
-        for s in range(steps):
-            a1 = angle + sweep * s / steps
-            t = s / max(steps, 1)
-            gc = tuple(int(col[i] * (1 - t) + bright[i] * t) for i in range(3))
-            pygame.draw.line(
-                surf, gc,
-                (cx + int(outer * 0.88 * math.cos(a1)), cy + int(outer * 0.88 * math.sin(a1))),
-                (cx + int(outer * math.cos(a1)), cy + int(outer * math.sin(a1))),
-                3,
-            )
-        angle += sweep
-
-    pygame.draw.circle(surf, CARD, (cx, cy), inner)
-    pygame.draw.circle(surf, BORDER, (cx, cy), inner, 1)
-
-    tot_t = fonts["bold"].render(str(p1g + p2g), True, GOLD)
-    sub_t = fonts["small"].render("gold used", True, DIM)
-    surf.blit(tot_t, tot_t.get_rect(center=(cx, cy - 6)))
-    surf.blit(sub_t, sub_t.get_rect(center=(cx, cy + 11)))
-
-    ly = y + h - 78
-    for val, col, _, lbl in slices:
-        pygame.draw.rect(surf, col, (x + 12, ly, 12, 12), border_radius=3)
-        t = fonts["small"].render(f"{lbl}: {val} ({val * 100 // total}%)", True, TEXT)
-        surf.blit(t, (x + 28, ly))
-        ly += 20
-
-
-def draw_histogram(surf, rows, rect, fonts):
-    x, y, w, h = rect
-    _panel(surf, rect, "Turns per Match", BLUE, fonts)
-    if not rows:
-        _no_data(surf, rect, fonts)
+    values = [p1g, p2g]
+    labels = ["Bot A", "Bot B"]
+    cols = [_mpl_color(P1_COL), _mpl_color(P2_COL)]
+    total = sum(values)
+    if total == 0:
+        ax.text(0.5, 0.5, "No gold spent yet", ha="center", va="center", color=MPL_DIM, transform=ax.transAxes)
+        ax.set_xticks([])
+        ax.set_yticks([])
         return
+    ax.pie(
+        values,
+        colors=cols,
+        startangle=90,
+        counterclock=False,
+        wedgeprops=dict(width=0.46, edgecolor=MPL_CARD),
+        autopct=lambda pct: f"{pct:.0f}%" if pct > 0 else "",
+        pctdistance=0.77,
+        textprops=dict(color=MPL_TEXT, fontsize=9, fontweight="bold"),
+    )
+    ax.legend(labels, loc="lower center", bbox_to_anchor=(0.5, -0.03), ncol=2,
+              frameon=False, labelcolor=MPL_TEXT, fontsize=8)
 
+
+def _plot_hist(ax, rows):
+    _style_axes(ax, "Turns per Match", MPL_BLUE)
     values = [_i(r, "total_turns") for r in rows if _i(r, "total_turns") > 0]
     if not values:
-        _no_data(surf, rect, fonts)
+        ax.text(0.5, 0.5, "No turn data", ha="center", va="center", color=MPL_DIM, transform=ax.transAxes)
+        ax.set_xticks([])
+        ax.set_yticks([])
         return
-
-    lo, hi = min(values), max(values)
-    n_bins = 8
-    bsize = max(1, math.ceil((hi - lo + 1) / n_bins))
-    bins = [0] * n_bins
-    for v in values:
-        bi = min(n_bins - 1, (v - lo) // bsize)
-        bins[bi] += 1
-    max_cnt = max(bins) or 1
+    counts, bins, patches = ax.hist(values, bins=8, color=MPL_HIST, edgecolor=MPL_BORDER, alpha=0.9)
     avg = sum(values) / len(values)
-
-    ax, ay = x + 42, y + 36
-    aw, ah = w - 54, h - 90
-    bw = aw // n_bins - 3
-
-    _grid_h(surf, ax, ay, aw, ah, max_cnt, [0, 50, 100], fonts["small"])
-
-    avg_x = ax + int(aw * (avg - lo) / max(hi - lo, 1))
-    pygame.draw.line(surf, GOLD, (avg_x, ay), (avg_x, ay + ah), 1)
-    al = fonts["small"].render(f"avg {avg:.0f}", True, GOLD)
-    surf.blit(al, (avg_x + 3, ay + 2))
-
-    for i, cnt in enumerate(bins):
-        bh = int(ah * cnt / max_cnt)
-        bx = ax + i * (aw // n_bins) + 1
-        by = ay + ah - bh
-        if cnt == 0:
-            continue
-        t = cnt / max_cnt
-        top = tuple(int(BLUE[j] * (0.5 + 0.5 * t) + 80 * (1 - t)) for j in range(3))
-        bot = tuple(int(BLUE[j] * 0.5) for j in range(3))
-        _gradient_bar(surf, (bx, by, bw, bh), top, bot, r=4)
-
-        cv = fonts["small"].render(str(cnt), True, TEXT)
-        surf.blit(cv, cv.get_rect(center=(bx + bw // 2, by - 11)))
-
-        lv = fonts["small"].render(str(lo + i * bsize), True, DIM)
-        surf.blit(lv, lv.get_rect(center=(bx + bw // 2, ay + ah + 13)))
-
-    px2 = x + 12
-    for lbl, val, col in [("Avg", f"{avg:.1f}", BLUE), ("Min", lo, DIM), ("Max", hi, DIM)]:
-        pw = _stat_pill(surf, px2, y + h - 44, lbl, val, col, fonts)
-        px2 += pw + 8
+    ax.axvline(avg, color=MPL_GOLD, linewidth=2)
+    peak = max(counts) if len(counts) else 1
+    ax.annotate(
+        f"avg {avg:.1f}",
+        xy=(avg, peak),
+        xytext=(8, 10),
+        textcoords="offset points",
+        ha="left",
+        va="bottom",
+        color=MPL_GOLD,
+        fontsize=9,
+        bbox=dict(boxstyle="round,pad=0.2", facecolor=MPL_CARD, edgecolor=MPL_GOLD, linewidth=0.8),
+    )
+    ax.set_ylim(0, peak * 1.18 if peak > 0 else 1)
 
 
-def _draw_summary(surf, rows, SW, fonts):
+def _render_matplotlib_page(rows, width, height, page, total_pages):
+    fig = Figure(figsize=(width / 100, height / 100), dpi=100, facecolor=MPL_BG)
+    canvas = FigureCanvasAgg(fig)
+
+    if total_pages == 1:
+        gs = fig.add_gridspec(2, 4, left=0.06, right=0.985, top=0.95, bottom=0.06,
+                              hspace=0.24, wspace=0.22)
+        ax_gem = fig.add_subplot(gs[0, 0:2])
+        ax_tier = fig.add_subplot(gs[0, 2:4])
+        ax_box = fig.add_subplot(gs[1, 0:2])
+        ax_pie = fig.add_subplot(gs[1, 2])
+        ax_hist = fig.add_subplot(gs[1, 3])
+        _plot_gem_chart(ax_gem, rows)
+        _plot_tier_chart(ax_tier, rows)
+        _plot_boxplot(ax_box, rows)
+        _plot_pie(ax_pie, rows)
+        _plot_hist(ax_hist, rows)
+    elif page == 0:
+        gs = fig.add_gridspec(2, 2, left=0.06, right=0.985, top=0.95, bottom=0.06,
+                              hspace=0.24, wspace=0.18, height_ratios=[0.92, 1.30])
+        ax_gem = fig.add_subplot(gs[0, 0])
+        ax_tier = fig.add_subplot(gs[0, 1])
+        ax_box = fig.add_subplot(gs[1, :])
+        _plot_gem_chart(ax_gem, rows)
+        _plot_tier_chart(ax_tier, rows)
+        _plot_boxplot(ax_box, rows)
+    else:
+        gs = fig.add_gridspec(1, 2, left=0.05, right=0.985, top=0.95, bottom=0.06,
+                              hspace=0.2, wspace=0.18, width_ratios=[0.85, 1.15])
+        ax_pie = fig.add_subplot(gs[0, 0])
+        ax_hist = fig.add_subplot(gs[0, 1])
+        _plot_pie(ax_pie, rows)
+        _plot_hist(ax_hist, rows)
+
+    canvas.draw()
+    raw = canvas.buffer_rgba()
+    surface = pygame.image.frombuffer(raw, (width, height), "RGBA").copy()
+    return surface
+
+
+def _get_dashboard_surface(rows, width, height, page, total_pages):
+    key = (width, height, page, total_pages, _rows_signature(rows))
+    cached = _FIGURE_CACHE.get(key)
+    if cached is not None:
+        return cached
+    surface = _render_matplotlib_page(rows, width, height, page, total_pages)
+    _FIGURE_CACHE.clear()
+    _FIGURE_CACHE[key] = surface
+    return surface
+
+
+def _draw_summary(surf, rows, screen_w, fonts):
     if not rows:
         return
     n = len(rows)
-    avg_t = sum(_i(r, "total_turns") for r in rows) / n
-    avg_m = sum(_i(r, "score_margin") for r in rows) / n
+    avg_turns = sum(_i(r, "total_turns") for r in rows) / n
+    avg_margin = sum(_i(r, "score_margin") for r in rows) / n
 
     pills = [
         ("Matches", n, TEAL),
-        ("Avg Turns", f"{avg_t:.1f}", BLUE),
-        ("Avg Margin", f"{avg_m:.1f}", ROSE),
+        ("Avg Turns", f"{avg_turns:.1f}", BLUE),
+        ("Avg Margin", f"{avg_margin:.1f}", ROSE),
     ]
     total_w = sum(90 for _ in pills) + 16 * (len(pills) - 1)
-    sx = SW - total_w - 14
+    sx = screen_w - total_w - 14
     sy = 6
-    for lbl, val, col in pills:
-        _stat_pill(surf, sx, sy, lbl, val, col, fonts)
+    for label, value, color in pills:
+        _stat_pill(surf, sx, sy, label, value, color, fonts)
         sx += 106
 
 
@@ -445,60 +348,16 @@ def _draw_stats_nav(surf, fonts, screen_w, screen_h, page, total_pages):
         rect = nav[key]
         hovered = enabled and rect[0] <= mx < rect[0] + rect[2] and rect[1] <= my < rect[1] + rect[3]
         _rnd(surf, CARD2 if enabled else CARD, rect, r=7)
-        _rnd(surf, CARD2 if enabled else CARD, rect, r=7, bw=1,
-             bc=BLUE if hovered else BORDER)
+        _rnd(surf, CARD2 if enabled else CARD, rect, r=7, bw=1, bc=BLUE if hovered else BORDER)
         text_col = TEXT if enabled else DIM
         t = fonts["normal"].render(label, True, text_col)
-        surf.blit(t, t.get_rect(center=(rect[0] + rect[2] // 2,
-                                        rect[1] + rect[3] // 2)))
+        surf.blit(t, t.get_rect(center=(rect[0] + rect[2] // 2, rect[1] + rect[3] // 2)))
 
     chip = nav["page"]
     _rnd(surf, CARD2, chip, r=7)
     _rnd(surf, CARD2, chip, r=7, bw=1, bc=BORDER)
     t = fonts["bold"].render(f"{page + 1}/{total_pages}", True, GOLD)
-    surf.blit(t, t.get_rect(center=(chip[0] + chip[2] // 2,
-                                    chip[1] + chip[3] // 2)))
-
-
-def _draw_single_page_layout(surf, rows, fonts, screen_w, screen_h):
-    mg = 8
-    row1_y, row1_h = 58, 296
-    row2_y = row1_y + row1_h + mg
-    row2_h = screen_h - row2_y - 56
-
-    half = (screen_w - mg * 3) // 2
-    third = (screen_w - mg * 4) // 3
-
-    draw_gem_chart(surf, rows, (mg, row1_y, half, row1_h), fonts)
-    draw_tier_chart(surf, rows, (half + mg * 2, row1_y, half, row1_h), fonts)
-    draw_boxplot(surf, rows, (mg, row2_y, half, row2_h), fonts)
-    draw_pie_chart(surf, rows, (half + mg * 2, row2_y, third, row2_h), fonts)
-    draw_histogram(surf, rows, (half + mg * 2 + third + mg, row2_y, third, row2_h), fonts)
-
-
-def _draw_paged_layout(surf, rows, fonts, screen_w, screen_h, page):
-    mg = 8
-    top = 58
-    bottom = screen_h - 58
-    content_h = bottom - top
-    page = max(0, min(page, 1))
-
-    if page == 0:
-        row1_h = int(content_h * 0.42)
-        row2_y = top + row1_h + mg
-        row2_h = bottom - row2_y
-        half = (screen_w - mg * 3) // 2
-
-        draw_gem_chart(surf, rows, (mg, top, half, row1_h), fonts)
-        draw_tier_chart(surf, rows, (half + mg * 2, top, half, row1_h), fonts)
-        draw_boxplot(surf, rows, (mg, row2_y, screen_w - mg * 2, row2_h), fonts)
-    else:
-        left_w = int((screen_w - mg * 3) * 0.40)
-        right_x = mg + left_w + mg
-        right_w = screen_w - right_x - mg
-
-        draw_pie_chart(surf, rows, (mg, top, left_w, content_h), fonts)
-        draw_histogram(surf, rows, (right_x, top, right_w, content_h), fonts)
+    surf.blit(t, t.get_rect(center=(chip[0] + chip[2] // 2, chip[1] + chip[3] // 2)))
 
 
 def draw_stats_screen(surf, rows, fonts, screen_w, screen_h,
@@ -511,15 +370,21 @@ def draw_stats_screen(surf, rows, fonts, screen_w, screen_h,
     surf.blit(t, t.get_rect(midleft=(13, 28)))
 
     _draw_summary(surf, rows, screen_w, fonts)
-    pygame.draw.line(surf, BORDER, (0, 52), (screen_w, 52), 1)
+    pygame.draw.line(surf, BORDER, (0, 60), (screen_w, 60), 1)
 
     total_pages = get_stats_page_count(screen_h)
     page = max(0, min(page, total_pages - 1))
+    content_rect = (8, 70, screen_w - 16, screen_h - 128)
 
-    if total_pages == 1:
-        _draw_single_page_layout(surf, rows, fonts, screen_w, screen_h)
+    if not rows:
+        _rnd(surf, CARD, content_rect, r=10)
+        _rnd(surf, CARD, content_rect, r=10, bw=1, bc=BORDER)
+        _no_data(surf, content_rect, fonts)
     else:
-        _draw_paged_layout(surf, rows, fonts, screen_w, screen_h, page)
+        mpl_surface = _get_dashboard_surface(
+            rows, content_rect[2], content_rect[3], page, total_pages
+        )
+        surf.blit(mpl_surface, content_rect[:2])
 
     pygame.draw.line(surf, BORDER, (0, screen_h - 50), (screen_w, screen_h - 50), 1)
     _draw_stats_nav(surf, fonts, screen_w, screen_h, page, total_pages)
