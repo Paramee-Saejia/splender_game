@@ -796,10 +796,6 @@ class SplendorApp:
                 if in_rect(mx, my, rect):
                     self._stats_page = idx
                     return
-        elif nav and in_rect(mx, my, nav["prev"]) and self._stats_page > 0:
-            self._stats_page -= 1
-        elif nav and in_rect(mx, my, nav["next"]) and self._stats_page < total_pages - 1:
-            self._stats_page += 1
         elif in_rect(mx, my, sim) and not self._sim_running:
             self._start_sim(100)
 
@@ -1144,10 +1140,6 @@ class SplendorApp:
             "Collect gems  ·  Buy cards  ·  Attract nobles  ·  Reach 15 prestige points",
             True, TEXT_C)
         desc_r = desc.get_rect(center=(cx, SH // 2 - 58))
-        desc_bg = pygame.Surface((desc_r.width + 26, desc_r.height + 10), pygame.SRCALPHA)
-        pygame.draw.rect(desc_bg, (0, 0, 0, 150), desc_bg.get_rect(), border_radius=8)
-        pygame.draw.rect(desc_bg, (96, 76, 36, 185), desc_bg.get_rect(), 1, border_radius=8)
-        s.blit(desc_bg, desc_bg.get_rect(center=desc_r.center))
         s.blit(desc, desc_r)
 
         # Separator line

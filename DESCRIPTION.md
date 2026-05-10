@@ -3,7 +3,7 @@
 ## 1. Project Overview
 
 - **Project Name:**  
-  Splendor game
+  Splendor: Human vs Bot with Statistics Dashboard
 
 - **Brief Description:**  
   This project is a digital adaptation of the board game *Splendor*, implemented in Python with Pygame. It allows a human player to play against an AI bot in a two-player match while preserving the core rules of the original game: collecting gem tokens, purchasing development cards, attracting nobles, and racing to 15 prestige points.
@@ -11,7 +11,7 @@
   In addition to the main game, the project includes a built-in statistics system. Match results can be logged to CSV, simulated through automated bot-versus-bot games, and visualized through an in-game dashboard. This makes the project both an interactive game and a small data-analysis application.
 
 - **Problem Statement:**  
-  The project solves two related problems. First, it provides a playable digital version of *Splendor* for users who want to enjoy the game without setting up the physical board. Second, it helps players analyze gameplay patterns by recording match data and presenting summaries such as gem collection, tier purchases, score margins, and match length.
+  The project solves two related problems. First, it provides a playable digital version of *Splendor* for users who want to enjoy the game without setting up the physical board. Second, it helps players analyze gameplay patterns by recording match data and presenting summaries such as gem collection, tier purchases, score margins, gold usage, and match length.
 
 - **Target Users:**  
   - Students learning object-oriented programming through a game-based project
@@ -24,26 +24,41 @@
   - Human vs Bot mode with a heuristic-based AI opponent
   - Bot vs Bot simulation mode for batch testing
   - Persistent match logging to CSV
-  - In-game statistics dashboard with multiple charts
+  - In-game statistics dashboard with multiple charts and tables
   - Custom fantasy-themed artwork for cards, nobles, tokens, and menu screens
 
 ### Screenshots
 
-The repository currently contains the game assets, but screenshot files are not committed yet. Add your final screenshots to the repository and replace the placeholder paths below.
+**Game Menu**  
+![game menu](./screenshots/gameplay/game_menu.png)
 
-- Gameplay screenshot: `./docs/screenshots/gameplay.png`
-- Statistics dashboard screenshot: `./docs/screenshots/statistics-dashboard.png`
+**Start Game**  
+![start game](./screenshots/gameplay/start_game.png)
 
-Example Markdown once the files are added:
+**Buy Card**  
+![buy card](./screenshots/gameplay/buy_card.png)
 
-```md
-![Gameplay Screenshot](./docs/screenshots/gameplay.png)
-![Statistics Dashboard](./docs/screenshots/statistics-dashboard.png)
-```
+**Reserve Card**  
+![reserve card](./screenshots/gameplay/reserved_card.png)
+
+**Buy Reserved Card**  
+![buy reserve](./screenshots/gameplay/buy_reserved.png)
+
+**Return Token**  
+![return token](./screenshots/gameplay/return_token.png)
+
+**End Game**  
+![end game](./screenshots/gameplay/end_game.png)
+
+**Tutorial Button**  
+![tutorial button](./screenshots/gameplay/tutorial_button.png)
+
+
 
 ### Proposal
 
-- Proposal PDF: `[Add your proposal PDF link here](./proposal.pdf)`
+- Proposal PDF: [proposal.pdf](./proposal.pdf)
+
 
 ### Presentation Video
 
@@ -235,7 +250,7 @@ The project also includes supporting function-based modules:
 
 - **`bot.py`:** Heuristic AI behavior for the bot player
 - **`bot_sim.py`:** Batch simulation runner for bot-versus-bot matches
-- **`stats_view.py`:** In-game Pygame dashboard rendering
+- **`stats_view.py`:** In-game Pygame dashboard rendering with Matplotlib
 - **`game_factory.py`:** Factory function that assembles a ready-to-play game
 - **`cards_data.py`:** Raw card and noble definitions used to build the board
 
@@ -272,22 +287,23 @@ Key data features include:
 - **Gold spent:** Helps measure how often wildcard tokens contribute to successful purchases
 - **Repeated simulation support:** Makes it possible to analyze trends over many bot-played matches
 
-The statistics are visualized through the in-game dashboard in `stats_view.py`, including gem collection, tier purchases, score margin distribution, gold usage, and turns-per-match views.
+The statistics are visualized through the in-game dashboard in `stats_view.py`, including:
+
+- Gem collection charts and tables
+- Tier purchase charts and tables
+- Score margin distribution
+- Turns-per-match histogram and summary table
+- Gold usage vs margin score summary table and scatter plot
+
+Detailed screenshot evidence and one-paragraph explanations for each visualization component are included in `screenshots/visualization/VISUALIZATION.md`.
 
 ---
 
 ## 6. Changed Proposed Features
 
-Compared with a typical initial proposal for a digital board game, the final project includes several practical extensions:
+The visualization part was changed from showing coin usage between Bot 1 and Bot 2 using a pie chart to showing the relationship between gold spent and score margin using a scatter plot.
 
-- A stronger heuristic bot instead of a simple random or greedy opponent
-- Automated bot-versus-bot simulation for generating larger datasets
-- A dedicated in-game statistics dashboard
-- Custom card, noble, token, and menu artwork integrated into the UI
-
-These changes were made to improve both gameplay quality and the analytical value of the project.
-
-An earlier browser-dashboard experiment was not carried into the final version. The final project keeps the integrated in-game statistics dashboard as the main visualization interface.
+The bot implementation was also changed. Instead of creating bots with multiple difficulty levels, the project scope was reduced to only one hard-level bot.
 
 ---
 
@@ -300,18 +316,24 @@ The project uses the following external libraries and technologies:
   Source: https://www.pygame.org/  
   License: LGPL
 
+- **Matplotlib**  
+  Used for rendering the statistics dashboard charts and tables  
+  Source: https://matplotlib.org/  
+  License: Matplotlib License
+
 - **Python Standard Library**  
   Modules such as `csv`, `datetime`, `math`, `os`, `random`, `sys`, `threading`, and `traceback` are used throughout the project  
   Source: https://docs.python.org/3/library/
 
 ### Artwork and Media Credits
 
-Add your final asset credits here if your submission includes any material created outside your team, such as:
+The visual assets used in this project were created using ChatGPT image generation, including:
 
-- AI-generated images
-- Third-party artwork
-- Music or sound effects
-- Reused code snippets
+Card component images
+Background image
+Coin/token images
+
+No third-party artwork, music, or sound effects were used.
 
 ### Tutorial Video References and Copyright
 
@@ -331,9 +353,4 @@ The start screen includes optional links to external YouTube tutorial videos for
 
 On GitHub, `Claude` may appear in the contributor or commit history view because some earlier commits were created with a `Co-Authored-By: Claude ...` footer when Claude was used to help produce commit messages or commit metadata. This does not mean Claude is an official team member or project owner; it only reflects how those earlier commits were recorded in Git history.
 
-Suggested format:
 
-- **Asset/Material:**  
-- **Creator / Source:**  
-- **Link:**  
-- **License / Permission:**  

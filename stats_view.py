@@ -436,7 +436,7 @@ def _plot_gold_margin_scatter(ax, rows):
         label="Matches",
         zorder=3,
     )
-    ax.set_xlabel("Total gold spent in match", color=MPL_DIM, fontsize=9)
+    ax.set_xlabel("Total gold spent in match", color=MPL_DIM, fontsize=9, labelpad=10)
     ax.set_ylabel("Score margin", color=MPL_DIM, fontsize=9)
 
     mean_gold = statistics.mean(gold_values)
@@ -525,7 +525,7 @@ def _render_matplotlib_page(rows, width, height, page, total_pages):
         _plot_margin_summary_table(ax_margin_table, rows)
         _plot_turn_summary_table(ax_turn_table, rows)
     else:
-        gs = fig.add_gridspec(1, 2, left=0.05, right=0.985, top=0.95, bottom=0.06,
+        gs = fig.add_gridspec(1, 2, left=0.05, right=0.985, top=0.95, bottom=0.10,
                               hspace=0.2, wspace=0.18, width_ratios=[0.85, 1.15])
         ax_gold_table = fig.add_subplot(gs[0, 0])
         ax_gold_scatter = fig.add_subplot(gs[0, 1])
@@ -574,11 +574,7 @@ def get_stats_page_count(screen_h):
 
 
 def get_stats_nav_rects(screen_w, screen_h, total_pages):
-    y = screen_h - 42
     nav = {
-        "prev": (screen_w // 2 - 116, y, 92, 34),
-        "page": (screen_w // 2 - 28, y, 56, 34),
-        "next": (screen_w // 2 + 24, y, 92, 34),
     }
     tab_y = 66
     tab_w = 132
@@ -609,23 +605,6 @@ def _draw_stats_nav(surf, fonts, screen_w, screen_h, page, total_pages):
         t = fonts["small"].render(label, True, TEXT if active or hovered else DIM)
         surf.blit(t, t.get_rect(center=(rect[0] + rect[2] // 2, rect[1] + rect[3] // 2)))
 
-    for key, label, enabled in [
-        ("prev", "< Prev", page > 0),
-        ("next", "Next >", page < total_pages - 1),
-    ]:
-        rect = nav[key]
-        hovered = enabled and rect[0] <= mx < rect[0] + rect[2] and rect[1] <= my < rect[1] + rect[3]
-        _rnd(surf, CARD2 if enabled else CARD, rect, r=7)
-        _rnd(surf, CARD2 if enabled else CARD, rect, r=7, bw=1, bc=BLUE if hovered else BORDER)
-        text_col = TEXT if enabled else DIM
-        t = fonts["normal"].render(label, True, text_col)
-        surf.blit(t, t.get_rect(center=(rect[0] + rect[2] // 2, rect[1] + rect[3] // 2)))
-
-    chip = nav["page"]
-    _rnd(surf, CARD2, chip, r=7)
-    _rnd(surf, CARD2, chip, r=7, bw=1, bc=BORDER)
-    t = fonts["bold"].render(f"{page + 1}/{total_pages}", True, GOLD)
-    surf.blit(t, t.get_rect(center=(chip[0] + chip[2] // 2, chip[1] + chip[3] // 2)))
 
 
 def draw_stats_screen(surf, rows, fonts, screen_w, screen_h,
