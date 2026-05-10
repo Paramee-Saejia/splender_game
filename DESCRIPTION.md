@@ -3,7 +3,7 @@
 ## 1. Project Overview
 
 - **Project Name:**  
-  Splendor: Human vs Bot with Statistics Dashboard
+  Splendor game
 
 - **Brief Description:**  
   This project is a digital adaptation of the board game *Splendor*, implemented in Python with Pygame. It allows a human player to play against an AI bot in a two-player match while preserving the core rules of the original game: collecting gem tokens, purchasing development cards, attracting nobles, and racing to 15 prestige points.
@@ -97,7 +97,7 @@ The problem is important because game projects are often judged only by whether 
 
 ### UML PDF Attachment
 
-- UML Class Diagram PDF: `[Add UML PDF here](./docs/uml-class-diagram.pdf)`
+- UML Class Diagram PDF: [UML PDF](./uml.pdf)
 
 ### UML Preview (Mermaid)
 

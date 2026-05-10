@@ -1,4 +1,4 @@
-# Splendor: Human vs Bot with Statistics Dashboard
+# Splendor game
 
 ## Project Description
 
@@ -135,4 +135,4 @@ Key files and folders:
 2. Matplotlib, https://matplotlib.org/ [statistics chart rendering]
 3. Python Standard Library, https://docs.python.org/3/library/ [core modules used in the project]
 
-Asset credits and other media acknowledgements can be added here if your team used any third-party or AI-generated artwork, music, or code references.
+
