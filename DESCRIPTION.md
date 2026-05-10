@@ -327,13 +327,17 @@ The project uses the following external libraries and technologies:
 
 ### Artwork and Media Credits
 
+This project is a fan-made educational recreation of the Splendor board game using Pygame.
+
+Splendor is a copyrighted board game originally designed by Marc André and published by Space Cowboys / Asmodee. All original game concepts, rules, names, and related intellectual property belong to their respective owners.
+
 The visual assets used in this project were created using ChatGPT image generation, including:
 
 Card component images
 Background image
 Coin/token images
 
-No third-party artwork, music, or sound effects were used.
+No third-party artwork, music, or sound effects were used. This project is made for educational purposes only and is not intended for commercial use.
 
 ### Tutorial Video References and Copyright
 
